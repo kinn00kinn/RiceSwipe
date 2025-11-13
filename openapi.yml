@@ -1,0 +1,245 @@
+openapi: 3.0.0
+info:
+  title: 動画プラットフォーム API
+  description: TikTok風動画共有プラットフォームのAPI仕様書
+  version: 1.0.0
+
+servers:
+  - url: /api # Next.js の API Routes を想定
+
+# ----------------------------------------
+# 1. 認証方式の定義 (JWT)
+# ----------------------------------------
+components:
+  securitySchemes:
+    # 'components/securitySchemes' で定義
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT # Supabase が発行する JWT を想定
+
+  # ----------------------------------------
+  # 2. 再利用可能なデータ型 (Schema)
+  # ----------------------------------------
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: エラーメッセージ
+      required:
+        - error
+
+    Video:
+      type: object
+      properties:
+        id:
+          type: string
+          format: cuid
+        title:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        author:
+          $ref: "#/components/schemas/UserShort"
+
+    UserShort:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+# ----------------------------------------
+# 3. API エンドポイント定義 (Paths)
+# ----------------------------------------
+paths:
+  # ---------------------------------
+  # 動画アップロード
+  # ---------------------------------
+  /upload/sign:
+    post:
+      summary: 動画アップロード用の署名付きURLを発行
+      description: クライアントがR2に直接アップロードするためのURLを要求します。
+      security:
+        - bearerAuth: [] # ★ 認証必須
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                filename:
+                  type: string
+                  description: "例: my_video.mp4"
+                contentType:
+                  type: string
+                  description: "例: video/mp4"
+      responses:
+        "200":
+          description: 署名付きURLの発行成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uploadUrl:
+                    type: string
+                    format: uri
+                    description: R2へのPUT用URL
+                  videoId:
+                    type: string
+                    format: cuid
+                    description: このアップロードに紐づく一意のVideo ID
+                  objectKey:
+                    type: string
+                    description: R2上のオブジェクトパス
+        "401":
+          description: 認証エラー
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ---------------------------------
+  # 動画メタデータ
+  # ---------------------------------
+  /videos:
+    post:
+      summary: 動画メタデータの保存
+      description: R2へのアップロード完了後、動画のタイトルやハッシュタグをDBに保存します。
+      security:
+        - bearerAuth: [] # ★ 認証必須
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                videoId:
+                  type: string
+                  description: /upload/sign で取得した videoId
+                objectKey:
+                  type: string
+                  description: /upload/sign で取得した objectKey
+                title:
+                  type: string
+                description:
+                  type: string
+                hashtags:
+                  type: array
+                  items:
+                    type: string
+                  description: "例: ['React', 'Nextjs']"
+      responses:
+        "201":
+          description: メタデータの保存成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Video"
+        "401":
+          description: 認証エラー
+        "400":
+          description: バリデーションエラー（Zodによる）
+
+  # ---------------------------------
+  # 動画フィード
+  # ---------------------------------
+  /feed:
+    get:
+      summary: 動画フィードの取得
+      description: スワイプ用の動画リストを取得します。
+      parameters:
+        - name: cursor
+          in: query
+          description: ページネーション用のカーソル（次のページの開始ID）
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 動画フィード
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  videos:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Video"
+                  nextCursor:
+                    type: string
+                    nullable: true
+
+  # ---------------------------------
+  # いいね
+  # ---------------------------------
+  /videos/{videoId}/like:
+    post:
+      summary: 動画に「いいね」する
+      security:
+        - bearerAuth: [] # ★ 認証必須
+      parameters:
+        - name: videoId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: cuid
+      responses:
+        "200":
+          description: いいね成功
+        "401":
+          description: 認証エラー
+        "404":
+          description: 動画が見つからない
+    delete:
+      summary: 動画の「いいね」を取り消す
+      security:
+        - bearerAuth: [] # ★ 認証必須
+      parameters:
+        - name: videoId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: cuid
+      responses:
+        "200":
+          description: いいね取消し成功
+        "401":
+          description: 認証エラー
+        "404":
+          description: 動画が見つからない
+
+  # ---------------------------------
+  # 検索
+  # ---------------------------------
+  /search/hashtag:
+    get:
+      summary: ハッシュタグで動画を検索
+      parameters:
+        - name: tag
+          in: query
+          required: true
+          schema:
+            type: string
+            description: "例: React"
+      responses:
+        "200":
+          description: 検索結果
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Video"
