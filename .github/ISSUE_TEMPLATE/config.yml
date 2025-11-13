@@ -1,0 +1,14 @@
+# Issueテンプレートの選択画面をカスタマイズします
+
+# ブランクIssue（テンプレートを使わないIssue）の作成を禁止する
+# これにより、必ずバグか機能要望のどちらかを選ばせる
+blank_issues_enabled: false
+
+# 外部ドキュメントへのリンク
+contact_links:
+  - name: 📖 プロジェクトドキュメント
+    url: https://github.com/（あなたのユーザー名）/（あなたのリポジトリ名）/tree/main/docs
+    about: まずは開発規約やAPI仕様書を確認してください。
+  - name: 💬 質問・相談 (Slack / Discord)
+    url: (あなたのチームのコミュニケーションツールのURL)
+    about: Issueを立てるまでもない簡単な質問や相談はこちらへ。
