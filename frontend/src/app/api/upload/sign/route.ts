@@ -2,32 +2,46 @@
 import { r2 } from "@/src/lib/r2Client";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { createId } from "@paralleldrive/cuid2"; // "getCuid" から "createId" に修正
+import { createId } from "@paralleldrive/cuid2";
 import { uploadSignRequestSchema } from "@/src/lib/validators/upload";
-
-// Prisma クライアントのインスタンスを作成
 import { prisma } from "@/src/lib/prisma";
-// const prisma = new PrismaClient();
 
 // 10GB の制限値をバイト単位で定義
 const STORAGE_LIMIT_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB
 
 export async function POST(request: Request) {
-  const cookieStore = cookies();
+  // ★★★ 修正点: cookies() をハンドラのトップレベルで呼び出す ★★★
+  const cookieStore = await cookies();
 
-  // ★★★ ここの渡し方を修正 ★★★
-  const supabase = createRouteHandlerClient({
-    cookies: () => cookieStore, // ✅ () => で包む
-  });
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          // ★ cookieStore 変数を参照する
+          return cookieStore.get(name)?.value;
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          // ★ cookieStore 変数を参照する
+          cookieStore.set({ name, value, ...options });
+        },
+        remove(name: string, options: CookieOptions) {
+          // ★ cookieStore 変数を参照する
+          cookieStore.delete({ name, ...options });
+        },
+      },
+    }
+  );
 
   try {
     // 1. 認証チェック
     const {
       data: { user },
-    } = await supabase.auth.getUser(); // ✅ これでエラーが消えるはず
+    } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -38,7 +52,7 @@ export async function POST(request: Request) {
 
     if (!validation.success) {
       return NextResponse.json(
-        { error: validation.error.issues }, // "errors" から "issues" に修正
+        { error: validation.error.issues },
         { status: 400 }
       );
     }
@@ -65,7 +79,7 @@ export async function POST(request: Request) {
     }
 
     // 4. ユニークなオブジェクトキーを生成
-    const videoId = createId(); // "getCuid" から "createId" に修正
+    const videoId = createId();
     const extension = contentType.split("/")[1];
     const objectKey = `${user.id}/${videoId}/original.${extension}`;
     const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME!;
@@ -87,8 +101,6 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Upload sign error:", error);
-    // エラーが supabase クライアントの初期化で起きた場合、
-    // ここではなく "unhandledRejection" としてキャッチされる
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
