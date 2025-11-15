@@ -1,17 +1,16 @@
+// src/app/swipe/page.tsx
 import SwipeFeed from "@/src/components/layouts/SwipeFeed";
 
 const SwipePage = () => {
-  // 同じ動画を3つ並べてスワイプできるようにします
+  // publicにあるダミー動画をリストアップ
   const videoUrls = [
     "/video1.mp4",
-    "/video1.mp4",
-    "/video1.mp4",
+    "/video2.mp4",
+    "/video3.mp4",
   ];
 
   return (
-    <main>
-      <SwipeFeed videoUrls={videoUrls} />
-    </main>
+    <SwipeFeed videoUrls={videoUrls} />
   );
 };
 

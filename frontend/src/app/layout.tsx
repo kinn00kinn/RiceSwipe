@@ -2,15 +2,14 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-// import { Header } from "@/components/layouts/Header"; // ★ インポート
-import { Header } from "@/src/components/layouts/Header"; // ★ インポート
-
+import Header from "@/src/components/layouts/Header";
+import BottomNavigation from "@/src/components/layouts/BottomNavigation";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "RiceSwipe", // ★ タイトル変更
-  description: "A new video platform", // ★ 説明変更
+  title: "RiceSwipe",
+  description: "A new video platform",
 };
 
 export default function RootLayout({
@@ -20,15 +19,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ja">
-      {" "}
-      {/* ★ 言語を ja に変更 */}
-      <body className={inter.className}>
+      <body className={`${inter.className} bg-gray-50`}>
         <div className="relative flex min-h-screen flex-col">
-          <Header /> {/* ★ Header をここに追加 */}
-          <main className="flex-1">
-            {children} {/* ★ 各ページの内容がここに入ります */}
+          <Header />
+          <main className="flex-1 pt-16 pb-16">
+            <div className="container mx-auto max-w-md px-4 py-8">
+              {children}
+            </div>
           </main>
-          {/* TODO: フッターやナビゲーションをここに追加 */}
+          <BottomNavigation />
         </div>
       </body>
     </html>
