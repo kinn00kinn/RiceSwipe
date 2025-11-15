@@ -17,9 +17,10 @@
 ## 開発環境のセットアップ
 
 1. リポジトリをクローンします。
-2. `.env.example` をコピーして `.env` を作成し、必要な環境変数（Supabase 接続情報など）を設定します。
+2. `.env.example` をコピーして `.env` を作成し、必要な環境変数（`docs/environment.md` を参照）を設定します。
 3. `npm install` を実行します。
-4. `npx prisma generate` を実行します。
+4. **（DB スキーマ変更時のみ）** `npx prisma migrate dev` を実行してマイグレーション SQL を生成します。
+   - **注意:** 本プロジェクトはランタイムで `Prisma Client` を使用しません。`docs/backend.md` の規約に従い、DB 操作は `postgres.js` で行います。
 5. `npm run dev` でローカルサーバーを起動します。
 
 ## 質問・相談
