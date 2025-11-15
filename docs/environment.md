@@ -7,9 +7,10 @@
 
 ### `DATABASE_URL`
 
-- **目的:** API Routes からデータベース (PostgreSQL) に接続するために使用します ( `node-postgres` 用)。
-- **取得場所:** Supabase ダッシュボード > [Project Settings] > [Database] > [Connection string] > [Nodejs]
-- **形式:** `postgresql://postgres:[PASSWORD]@[HOST]:[PORT]/postgres`
+- **目的:** API Routes (Edge Runtime) から **`postgres.js`** を使ってデータベース (PostgreSQL) に接続するために使用します。
+- **【重要】:** **pgBouncer** の接続文字列（ポート `6543`）を使用してください。
+- **取得場所:** Supabase ダッシュボード > [Project Settings] > [Database] > [Connection string] > [pgBouncer] (Transaction mode)
+- **形式:** `postgresql://postgres:[PASSWORD]@[HOST]:6543/postgres`
 
 ### `SUPABASE_JWT_SECRET`
 
@@ -38,14 +39,7 @@
 - **目的:** R2 API トークン (S3 互換 API) のシークレットアクセスキーです。
 - **取得場所:** 上記の `R2_ACCESS_KEY_ID` と同じトークン作成時に一度だけ表示されます。
 
-## 3. Gemini API (AI 機能)
-
-### `GEMINI_API_KEY`
-
-- **目的:** Google の Gemini API をバックエンドから呼び出すために使用します。
-- **取得場所:** Google AI Studio (旧 MakerSuite) などで発行した API キー。
-
-## 4. GitHub Actions (CI/CD)
+## 3. GitHub Actions (CI/CD)
 
 以下の変数は、ローカルの `.env` ではなく、GitHub リポジトリの [Settings] > [Secrets and variables] > [Actions] に設定します。`ci.yml` から参照されます。
 
