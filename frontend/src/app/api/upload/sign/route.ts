@@ -89,7 +89,7 @@ export async function POST(request: Request) {
       Bucket: R2_BUCKET_NAME,
       Key: objectKey,
       ContentType: contentType,
-      ContentLength: fileSize,
+      // ContentLength: fileSize,
     });
     const uploadUrl = await getSignedUrl(r2, command, { expiresIn: 3600 });
 

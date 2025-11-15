@@ -65,7 +65,10 @@ export default function UploadPage() {
       const uploadResponse = await fetch(uploadUrl, {
         method: "PUT",
         body: selectedFile,
-        headers: { "Content-Type": selectedFile.type },
+        headers: {
+          "Content-Type": selectedFile.type,
+          "x-amz-content-sha256": "UNSIGNED-PAYLOAD" // ★★★ この行が絶対に必要です ★★★
+        },
       });
 
       if (!uploadResponse.ok) {
