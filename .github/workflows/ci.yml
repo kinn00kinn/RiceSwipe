@@ -13,6 +13,11 @@ jobs:
   quality_checks:
     name: Lint, Type-Check, Test
     runs-on: ubuntu-latest
+    # --- 追加 ---
+    defaults:
+      run:
+        working-directory: ./frontend # 作業ディレクトリを 'frontend' に指定
+    # ----------
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -20,32 +25,35 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 20 # プロジェクトで使用するNode.jsバージョン
+          node-version: 20
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci # 'frontend' ディレクトリで実行される
 
       - name: Run ESLint
         run: npm run lint
 
       - name: Run Type Check (TypeScript)
-        run: npm run type-check # package.json に "tsc --noEmit" を定義
+        run: npm run type-check
 
       - name: Run Unit Tests
         run: npm run test
 
       - name: Run Prisma Generate (for Type Check)
-        # ランタイムでは使わないが、型チェックのために型定義の生成が必要
         run: npx prisma generate
         env:
-          # CIでは本番DBに接続しないため、ダミーのURLで可
           DATABASE_URL: ${{ secrets.DATABASE_URL_DUMMY || 'postgresql://user:pass@host:port/db' }}
 
   # 2. ビルド
   build:
     name: Build Next.js
-    needs: quality_checks # quality_checks が成功したら実行
+    needs: quality_checks
     runs-on: ubuntu-latest
+    # --- 追加 ---
+    defaults:
+      run:
+        working-directory: ./frontend
+    # ----------
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -61,26 +69,45 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          # ビルド時にもダミーのDB URL が必要 (Prisma Generateが走る場合)
           DATABASE_URL: ${{ secrets.DATABASE_URL_DUMMY || 'postgresql://user:pass@host:port/db' }}
-          # ここに R2_... や SUPABASE_JWT_SECRET 以外の
-          # ビルド時に必要な環境変数を追加する (例: NEXT_PUBLIC_...)
+          # NEXT_PUBLIC_... などのビルド時環境変数をここに追加
 
-  # 3. デプロイ (main ブランチへの PUSH 時のみ)
+      # --- 追加: ビルド成果物をアップロード ---
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: nextjs-build
+          # Next.jsのバージョンや設定によって出力先が異なる場合があります
+          # Edge Runtime/SSR (推奨) の場合: .vercel/output
+          # 静的 (output: 'export') の場合: out
+          # 古いNext.jsの場合: .next
+          # ※ここでは 'frontend' ディレクトリ内の出力先を指定します
+          path: ./frontend/.vercel/output 
+          # もし 'frontend/next.config.js' で output: 'export' しているなら './frontend/out' に変更
+          # もし 'frontend/.next' を使う古い設定なら './frontend/.next' に変更
+
+  # 3. デプロイ
   deploy:
     name: Deploy to Cloudflare Pages
-    needs: build # build が成功したら実行
+    needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      # --- 修正: チェックアウトの代わりに成果物をダウンロード ---
+      - name: Download build artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: nextjs-build
+          # ダウンロード先 (例: 'dist' フォルダ)
+          path: ./dist 
+      # ---------------------------------------------
 
       - name: Publish to Cloudflare Pages
         uses: cloudflare/pages-action@v1
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: "your-project-name" # Cloudflare Pages のプロジェクト名
-          directory: ".next" # Next.js のビルド出力
-          # Next.js (Edge Runtime) の場合はこれだけで動作するはず
+          projectName: "your-project-name"
+          # --- 修正: ダウンロードしたディレクトリを指定 ---
+          directory: ./dist
+          # ----------------------------------------
