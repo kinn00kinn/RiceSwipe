@@ -82,7 +82,7 @@ jobs:
 
       # --- 追加: ビルド成果物をアップロード ---
       - name: Upload build artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: nextjs-build
           # Next.jsのバージョンや設定によって出力先が異なる場合があります
@@ -103,7 +103,7 @@ jobs:
     steps:
       # --- 修正: チェックアウトの代わりに成果物をダウンロード ---
       - name: Download build artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: nextjs-build
           # ダウンロード先 (例: 'dist' フォルダ)
