@@ -5,11 +5,34 @@ import { useRef, useState, useEffect } from "react";
 
 interface VideoPlayerProps {
   src: string;
+  isActive: boolean;
 }
 
-export default function VideoPlayer({ src }: VideoPlayerProps) {
+export default function VideoPlayer({ src, isActive }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  // Play or pause the video based on the isActive prop
+  useEffect(() => {
+    const videoElement = videoRef.current;
+    if (videoElement) {
+      if (isActive) {
+        // Attempt to play the video
+        videoElement.play().then(() => {
+          setIsPlaying(true);
+        }).catch(error => {
+          // Autoplay can be blocked by browser policies
+          console.error("Autoplay was prevented:", error);
+          setIsPlaying(false);
+        });
+      } else {
+        // Pause the video and reset its time when it becomes inactive
+        videoElement.pause();
+        videoElement.currentTime = 0;
+        setIsPlaying(false);
+      }
+    }
+  }, [isActive, src]); // Also depend on src in case the video source changes
 
   const handleVideoClick = () => {
     if (videoRef.current) {
@@ -23,26 +46,15 @@ export default function VideoPlayer({ src }: VideoPlayerProps) {
     }
   };
 
-  useEffect(() => {
-    // This handles the case where the video ends
-    const videoElement = videoRef.current;
-    if (videoElement) {
-      const handleEnded = () => setIsPlaying(false);
-      videoElement.addEventListener("ended", handleEnded);
-      return () => {
-        videoElement.removeEventListener("ended", handleEnded);
-      };
-    }
-  }, []);
-
   return (
-    <div className="relative w-full h-full bg-black rounded-lg" onClick={handleVideoClick}>
+    <div className="relative w-full h-full bg-black" onClick={handleVideoClick}>
       <video
         ref={videoRef}
         src={src}
         loop
+        muted // Mute is often required for autoplay to work
         className="w-full h-full object-contain"
-        playsInline // Important for iOS
+        playsInline // Important for iOS Safari
       />
       {!isPlaying && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

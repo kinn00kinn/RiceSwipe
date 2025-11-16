@@ -3,78 +3,72 @@
 
 import { useVideoFeed } from "@/features/feed/hooks/useVideoFeed";
 import VideoPlayer from "./VideoPlayer";
-import { useInView } from "react-intersection-observer";
-import { useEffect } from "react";
+import { useState } from "react";
+
+// Import Swiper React components and required modules
+import { Swiper, SwiperSlide } from "swiper/react";
+import { Mousewheel, Pagination } from "swiper/modules";
+
+// Import Swiper styles
+import "swiper/css";
+import "swiper/css/pagination";
 
 export default function VideoFeed() {
-  const {
-    videos,
-    error,
-    isLoading,
-    isLoadingMore,
-    isReachingEnd,
-    setSize,
-    size,
-  } = useVideoFeed();
-  
-  // This hook gives us a `ref` to attach to an element and a boolean `inView`.
-  const { ref, inView } = useInView({
-    threshold: 0.5, // Trigger when 50% of the element is visible
-    triggerOnce: false, // Keep observing
-  });
+  const { videos, error, isLoading, isReachingEnd, setSize, size } =
+    useVideoFeed();
+  const [activeIndex, setActiveIndex] = useState(0);
 
-  // When the trigger element (`ref`) is in view, load the next page.
-  useEffect(() => {
-    if (inView && !isReachingEnd && !isLoadingMore) {
+  const handleReachEnd = () => {
+    // Load more videos when the end of the swiper is reached
+    if (!isReachingEnd) {
       setSize(size + 1);
     }
-  }, [inView, isReachingEnd, isLoadingMore, setSize, size]);
+  };
 
   if (error) {
     return (
-      <div className="text-red-500">
-        フィードの読み込みに失敗しました。
-        <pre className="text-xs">{error.message}</pre>
+      <div className="fixed inset-0 flex items-center justify-center bg-black text-red-500">
+        <p>フィードの読み込みに失敗しました: {error.message}</p>
       </div>
     );
   }
 
-  // Show initial loading state
   if (isLoading && videos.length === 0) {
-    return <div>フィードを読み込み中...</div>;
-  }
-
-  // Show if there are no videos at all
-  if (!isLoading && videos.length === 0) {
-    return <div>動画がありません。</div>;
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-black text-white">
+        <p>フィードを読み込み中...</p>
+      </div>
+    );
   }
 
   return (
-    <div className="w-full max-w-md mx-auto space-y-8">
-      {videos.map((video) => (
-        <div key={video.id} className="bg-white shadow-lg rounded-lg p-4">
-          <div className="aspect-w-9 aspect-h-16">
-            {/* The video URL is now directly available from the API */}
-            <VideoPlayer src={video.videoUrl} />
+    <Swiper
+      modules={[Mousewheel, Pagination]}
+      direction="vertical"
+      slidesPerView={1}
+      mousewheel
+      pagination={{ clickable: true }}
+      className="w-full h-screen"
+      onSlideChange={(swiper) => setActiveIndex(swiper.activeIndex)}
+      onReachEnd={handleReachEnd}
+    >
+      {videos.map((video, index) => (
+        <SwiperSlide key={video.id} className="bg-black flex items-center justify-center">
+          <VideoPlayer src={video.videoUrl} isActive={index === activeIndex} />
+          {/* Video Info Overlay */}
+          <div className="absolute bottom-10 left-0 p-4 text-white bg-gradient-to-t from-black/60 to-transparent w-full">
+            <p className="font-bold text-lg">@{video.author.name}</p>
+            <p className="text-sm mt-1">{video.description}</p>
           </div>
-          <div className="mt-4">
-            <p className="font-bold">{video.title}</p>
-            <p className="text-sm text-gray-600">投稿者: {video.author.name}</p>
-            <p className="text-sm text-gray-800 mt-2">{video.description}</p>
-          </div>
-        </div>
+        </SwiperSlide>
       ))}
 
-      {/* This invisible element will trigger loading more videos when it becomes visible */}
-      <div ref={ref} className="h-10 flex justify-center items-center">
-        {isLoadingMore && !isReachingEnd && <p>読み込み中...</p>}
-      </div>
-
-      {isReachingEnd && videos.length > 0 && (
-        <div className="text-center text-gray-500 py-4">
-          <p>これ以上動画はありません</p>
-        </div>
+      {/* Loading indicator for the next page */}
+      {!isReachingEnd && videos.length > 0 && (
+        <SwiperSlide className="bg-black flex items-center justify-center text-white">
+          <p>読み込み中...</p>
+        </SwiperSlide>
       )}
-    </div>
+    </Swiper>
   );
 }
