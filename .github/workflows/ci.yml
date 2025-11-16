@@ -37,8 +37,8 @@ jobs:
       # 'type-check' スクリプトが package.json に存在しないため、このステップをコメントアウトします。
       # もし型チェックを行いたい場合は、 frontend/package.json の "scripts" に
       # "type-check": "tsc --noEmit" などを追加してください。
-      # - name: Run Type Check (TypeScript)
-      #   run: npm run type-check
+      - name: Run Type Check (TypeScript)
+        run: npm run type-check
 
       # --- 修正 ---
       # 'test' スクリプトが package.json に存在しないため、このステップをコメントアウトします。
