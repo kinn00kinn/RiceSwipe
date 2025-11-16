@@ -1,7 +1,7 @@
 // pages/api/auth/callback.ts
 import { createServerClient, serialize } from "@supabase/ssr";
 import { NextApiRequest, NextApiResponse } from "next";
-
+export const runtime = "edge"; // 👈 この行を追記
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse

@@ -1,7 +1,7 @@
 // pages/api/feed.ts
 import { sql } from "@/lib/dbClient";
 import { NextApiRequest, NextApiResponse } from "next";
-
+export const runtime = 'edge'; // 👈 この行を追記
 const FEED_LIMIT = 5;
 
 export default async function handler(

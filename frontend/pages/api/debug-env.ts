@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { sql } from "@/lib/dbClient";
 import s3 from "@/lib/r2Client";
 import { ListBucketsCommand } from "@aws-sdk/client-s3";
-
+export const runtime = 'edge'; // 👈 この行を追記
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
