@@ -52,63 +52,76 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_DUMMY || 'postgresql://user:pass@host:port/db' }}
 
-  # 2. ビルド
-  build:
-    name: Build Next.js
-    needs: quality_checks
-    runs-on: ubuntu-latest
-    # --- 追加 ---
-    defaults:
-      run:
-        working-directory: ./frontend
-    # ----------
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+  # # 2. ビルド
+  # build:
+  #   name: Build Next.js
+  #   needs: quality_checks
+  #   runs-on: ubuntu-latest
+  #   # --- 追加 ---
+  #   defaults:
+  #     run:
+  #       working-directory: ./frontend
+  #   # ----------
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 20
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v3
+  #       with:
+  #         node-version: 20
 
-      - name: Install dependencies
-        run: npm ci
+  #     - name: Install dependencies
+  #       run: npm ci
 
-      - name: Build
-        run: npm run build
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_DUMMY || 'postgresql://user:pass@host:port/db' }}
-          # NEXT_PUBLIC_... などのビルド時環境変数をここに追加
+  #     - name: Build
+  #       run: npm run build
+  #       env:
+  #         DATABASE_URL: ${{ secrets.DATABASE_URL_DUMMY || 'postgresql://user:pass@host:port/db' }}
+  #         # NEXT_PUBLIC_... などのビルド時環境変数をここに追加
 
-      # --- 追加: ビルド成果物をアップロード ---
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: nextjs-build
-          # Next.jsのバージョンや設定によって出力先が異なる場合があります
-          # Edge Runtime/SSR (推奨) の場合: .vercel/output
-          # 静的 (output: 'export') の場合: out
-          # 古いNext.jsの場合: .next
-          # ※ここでは 'frontend' ディレクトリ内の出力先を指定します
-          path: ./frontend/.next
-          # もし 'frontend/next.config.js' で output: 'export' しているなら './frontend/out' に変更
-          # もし 'frontend/.next' を使う古い設定なら './frontend/.next' に変更
+  #     # --- 追加: ビルド成果物をアップロード ---
+  #     - name: Upload build artifact
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: nextjs-build
+  #         # Next.jsのバージョンや設定によって出力先が異なる場合があります
+  #         # Edge Runtime/SSR (推奨) の場合: .vercel/output
+  #         # 静的 (output: 'export') の場合: out
+  #         # 古いNext.jsの場合: .next
+  #         # ※ここでは 'frontend' ディレクトリ内の出力先を指定します
+  #         path: ./frontend/.next
+  #         # もし 'frontend/next.config.js' で output: 'export' しているなら './frontend/out' に変更
+  #         # もし 'frontend/.next' を使う古い設定なら './frontend/.next' に変更
 
   # 3. デプロイ
   deploy:
     name: Deploy to Cloudflare Pages
-    needs: build
+    needs: quality_checks
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       # --- 修正: チェックアウトの代わりに成果物をダウンロード ---
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: nextjs-build
-          # ダウンロード先 (例: 'dist' フォルダ)
-          path: ./dist 
+      # - name: Download build artifact
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: nextjs-build
+      #     # ダウンロード先 (例: 'dist' フォルダ)
+      #     path: ./dist 
       # ---------------------------------------------
+      # 🔻 ここから追加 🔻
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./frontend
+      # 🔺 ここまで追加 🔺
 
       - name: Publish to Cloudflare Pages
         uses: cloudflare/pages-action@v1

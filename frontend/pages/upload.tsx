@@ -1,7 +1,19 @@
 // pages/upload.tsx
-import AuthGuard from "@/components/AuthGuard";
+// import AuthGuard from "@/components/AuthGuard";
 import Navigation from "@/components/Navigation";
 import UploadForm from "@/components/UploadForm";
+import dynamic from "next/dynamic"; // 👈 追加
+
+// 👈 ここから追加
+const AuthGuard = dynamic(() => import("@/components/AuthGuard"), {
+  ssr: false,
+  loading: () => (
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <p>読み込み中...</p>
+    </div>
+  ),
+});
+// 👈 ここまで追加
 
 export default function UploadPage() {
   return (
