@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 export default async function Login({
   searchParams,
 }: {
-  searchParams: { message: string };
+  searchParams: { [key: string]: string | string[] | undefined };
 }) {
   const signInWithGoogle = async () => {
     "use server";
