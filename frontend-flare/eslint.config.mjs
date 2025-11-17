@@ -1,72 +1,29 @@
 // @ts-check
 
-import eslint from '@eslint/js';
-import tseslint from 'typescript-eslint';
-import nextPlugin from '@next/eslint-plugin-next';
-import reactPlugin from 'eslint-plugin-react';
-import hooksPlugin from 'eslint-plugin-react-hooks';
-import jsxA11yPlugin from 'eslint-plugin-jsx-a11y';
+import tseslint from "typescript-eslint";
+import nextConfig from "eslint-config-next";
 
 /** @type {import('typescript-eslint').Config} */
 export default tseslint.config(
+  // 1. Next.js の標準設定（React, TypeScript, a11y 等をすべて含む）を適用
+  ...nextConfig,
+
+  // 2. グローバルな ignore 設定
   {
-    // Globally ignored files
-    ignores: ['.next/**', 'node_modules/**', '.open-next/**'],
+    ignores: [".next/**", "node_modules/**", ".open-next/**"],
   },
+
+  // 3. プロジェクト固有のカスタムルールを「上書き」
+  //    (必ず nextConfig の *後* に記述してください)
   {
-    // Core configs
-    files: ['**/*.{js,mjs,cjs,ts,jsx,tsx}'],
-    ...eslint.configs.recommended,
-  },
-  {
-    // TypeScript configs
-    files: ['**/*.{ts,tsx}'],
-    extends: [tseslint.configs.recommended],
+    files: ["**/*.{ts,tsx}"],
     rules: {
-      '@typescript-eslint/no-unused-vars': [
-        'error',
-        { 'argsIgnorePattern': '^_', 'varsIgnorePattern': '^_' }
-      ]
+      // 元のファイルにあったカスタムルール
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+      // 他にも上書きしたいルールがあればここに追加
     },
-    plugins: {
-      '@typescript-eslint': tseslint.plugin,
-    },
-    languageOptions: {
-      parser: tseslint.parser,
-      parserOptions: {
-        project: true,
-      },
-    },
-  },
-  {
-    // React configs
-    files: ['**/*.{js,jsx,ts,tsx}'],
-    plugins: {
-      react: reactPlugin,
-      'react-hooks': hooksPlugin,
-      'jsx-a11y': jsxA11yPlugin,
-    },
-    rules: {
-      ...reactPlugin.configs.recommended.rules,
-      ...reactPlugin.configs['jsx-runtime'].rules,
-      ...hooksPlugin.configs.recommended.rules,
-      ...jsxA11yPlugin.configs.recommended.rules,
-    },
-    settings: {
-      react: {
-        version: 'detect',
-      },
-    },
-  },
-  {
-    // Next.js configs
-    files: ['**/*.{js,jsx,ts,tsx}'],
-    plugins: {
-      '@next/next': nextPlugin,
-    },
-    rules: {
-      ...nextPlugin.configs.recommended.rules,
-      ...nextPlugin.configs['core-web-vitals'].rules,
-    },
-  },
+  }
 );

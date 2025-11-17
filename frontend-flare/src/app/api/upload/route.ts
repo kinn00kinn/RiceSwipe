@@ -8,7 +8,7 @@ import { randomUUID } from "crypto";
 
 export async function POST(request: Request) {
   // createServerComponentClient は引数なしで使う実装に合わせる
-  const supabase = createServerComponentClient();
+  const supabase = await createServerComponentClient();
 
   const {
     data: { user },

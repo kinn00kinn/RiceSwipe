@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import VideoFeed from './components/VideoFeed';
 
 export default async function Page() {
-  const supabase = createServerComponentClient();
+  const supabase = await createServerComponentClient();
 
   const {
     data: { user },
@@ -16,7 +16,7 @@ export default async function Page() {
   const signOut = async () => {
     'use server';
 
-    const supabase = createServerComponentClient();
+    const supabase = await createServerComponentClient();
     await supabase.auth.signOut();
     return redirect('/login');
   };

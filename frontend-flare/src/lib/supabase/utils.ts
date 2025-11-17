@@ -3,8 +3,8 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { cache } from 'react'
 
-export const createServerComponentClient = cache(() => {
-  const cookieStore = cookies()
+export const createServerComponentClient = cache(async () => { // <-- async を追加
+  const cookieStore = await cookies() // <-- await を追加
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

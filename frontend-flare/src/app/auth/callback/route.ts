@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
 
   if (code) {
     // createServerComponentClient は引数を取らない実装に合わせる
-    const supabase = createServerComponentClient();
+    const supabase = await createServerComponentClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
       return NextResponse.redirect(`${origin}${next}`);
