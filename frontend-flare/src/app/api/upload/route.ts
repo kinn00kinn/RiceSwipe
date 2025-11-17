@@ -1,3 +1,4 @@
+// src/app/api/upload/route.ts
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { R2, R2_BUCKET_NAME } from '@/lib/r2';
@@ -7,12 +8,19 @@ import { randomUUID } from 'crypto';
 import { cookies } from 'next/headers';
 
 export async function POST(request: Request) {
-  const cookieStore = cookies();
-  const supabase = createServerComponentClient(cookieStore);
-  
+  // cookies() は必要なら使えるが、createServerComponentClient は引数を取らない実装のため渡さない
+  // const cookieStore = cookies();
+  const supabase = createServerComponentClient();
+
   const {
     data: { user },
+    error: getUserError,
   } = await supabase.auth.getUser();
+
+  if (getUserError) {
+    console.error('supabase.getUser error:', getUserError);
+    return NextResponse.json({ error: getUserError.message }, { status: 500 });
+  }
 
   // 1. ユーザーが認証されているか確認
   if (!user) {
