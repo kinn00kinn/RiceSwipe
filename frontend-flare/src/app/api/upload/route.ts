@@ -1,15 +1,13 @@
 // src/app/api/upload/route.ts
-import { PutObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { R2, R2_BUCKET_NAME } from '@/lib/r2';
-import { createServerComponentClient } from '@/lib/supabase/utils';
-import { NextResponse } from 'next/server';
-import { randomUUID } from 'crypto';
-import { cookies } from 'next/headers';
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { R2, R2_BUCKET_NAME } from "@/lib/r2";
+import { createServerComponentClient } from "@/lib/supabase/utils";
+import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 
 export async function POST(request: Request) {
-  // cookies() は必要なら使えるが、createServerComponentClient は引数を取らない実装のため渡さない
-  // const cookieStore = cookies();
+  // createServerComponentClient は引数なしで使う実装に合わせる
   const supabase = createServerComponentClient();
 
   const {
@@ -18,20 +16,31 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
 
   if (getUserError) {
-    console.error('supabase.getUser error:', getUserError);
+    console.error("supabase.getUser error:", getUserError);
     return NextResponse.json({ error: getUserError.message }, { status: 500 });
   }
 
-  // 1. ユーザーが認証されているか確認
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const { filename, contentType } = await request.json();
+    // request.json() の戻りは unknown なので安全に扱う
+    const body: unknown = await request.json();
 
-    if (!filename || !contentType) {
-      return NextResponse.json({ error: 'Missing filename or contentType' }, { status: 400 });
+    if (typeof body !== "object" || body === null) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+
+    // 型ガード
+    const filename = (body as Record<string, unknown>).filename;
+    const contentType = (body as Record<string, unknown>).contentType;
+
+    if (typeof filename !== "string" || typeof contentType !== "string") {
+      return NextResponse.json(
+        { error: "Missing or invalid filename or contentType" },
+        { status: 400 }
+      );
     }
 
     // 2. 他のファイルと重複しないようにユニークなキーを生成
@@ -48,7 +57,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ signedUrl, key });
   } catch (error) {
-    console.error('Error generating signed URL:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    console.error("Error generating signed URL:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }
