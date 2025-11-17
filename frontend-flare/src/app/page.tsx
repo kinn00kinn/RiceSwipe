@@ -16,9 +16,8 @@ export default async function Page() {
 
   const signOut = async () => {
     'use server';
-    
-    const cookieStore = cookies();
-    const supabase = createServerComponentClient(cookieStore);
+
+    const supabase = createServerComponentClient();
     await supabase.auth.signOut();
     return redirect('/login');
   };
