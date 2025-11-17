@@ -2,7 +2,7 @@ import { createServerComponentClient } from "@/lib/supabase/utils";
 import { headers, cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-export default function Login({
+export default async function Login({
   searchParams,
 }: {
   searchParams: { message: string };
