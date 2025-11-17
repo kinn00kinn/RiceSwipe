@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useSwipeable } from 'react-swipeable';
 import useSWR from 'swr';
 import type { Video as VideoType } from '@prisma/client';

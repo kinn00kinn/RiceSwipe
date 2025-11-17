@@ -1,5 +1,4 @@
 import { createServerComponentClient } from '@/lib/supabase/utils';
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import VideoFeed from './components/VideoFeed';
 

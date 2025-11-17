@@ -1,6 +1,6 @@
 // app/login/page.tsx
 import { createServerComponentClient } from "@/lib/supabase/utils";
-import { headers, cookies } from "next/headers";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { PageProps } from "next";
 

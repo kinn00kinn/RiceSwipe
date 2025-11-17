@@ -19,6 +19,11 @@ interface VideoPlayerProps {
 const R2_PUBLIC_DOMAIN = process.env.NEXT_PUBLIC_R2_PUBLIC_DOMAIN;
 
 export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const progressContainerRef = useRef<HTMLDivElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+
   if (!R2_PUBLIC_DOMAIN) {
     return (
       <div className="w-full h-full bg-black flex items-center justify-center text-white text-center p-4">
@@ -30,11 +35,6 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
       </div>
     );
   }
-
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const progressContainerRef = useRef<HTMLDivElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
 
   const videoUrl = `${R2_PUBLIC_DOMAIN}/${video.r2ObjectKey}`;
 
@@ -102,6 +102,12 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     videoRef.current.currentTime = seekPosition * videoRef.current.duration;
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, action: () => void) => {
+    if (e.key === 'Enter') {
+      action();
+    }
+  };
+
   return (
     <div className="relative w-full h-full bg-black">
       <video
@@ -120,9 +126,15 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
         <div className="w-full h-20 bg-gradient-to-b from-black/50 to-transparent"></div>
 
         {/* Center play/pause icon */}
-        <div className="flex-grow flex items-center justify-center" onClick={togglePlay}>
+        <div 
+          role="button"
+          tabIndex={0}
+          className="flex-grow flex items-center justify-center" 
+          onClick={togglePlay}
+          onKeyDown={(e) => handleKeyDown(e, togglePlay)}
+        >
           {!isPlaying && (
-            <div className="p-4 rounded-full bg-black/50">
+            <div className="p-4 rounded-full bg-black/50 pointer-events-none">
               <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
               </svg>
@@ -139,6 +151,8 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
           {/* Progress Bar */}
           <div 
             ref={progressContainerRef}
+            role="button"
+            tabIndex={0}
             className="w-full h-5 cursor-pointer group"
             onClick={handleSeek}
           >
