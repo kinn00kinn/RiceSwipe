@@ -11,8 +11,7 @@ export default function Login({
     "use server";
 
     const origin = headers().get("origin");
-    const cookieStore = cookies();
-    const supabase = createServerComponentClient(cookieStore);
+    const supabase = createServerComponentClient();
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
