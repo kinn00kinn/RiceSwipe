@@ -1,0 +1,150 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider     = "postgresql" // Supabase は Postgres
+  url          = env("DATABASE_URL")
+  relationMode = "prisma"
+}
+
+// ------------------------------------
+// 1. 認証 (Authentication)
+// ------------------------------------
+// Supabase Auth と同期するテーブル
+model User {
+  id            String    @id @default(uuid()) // Supabase Auth の 'id' と一致させる
+  email         String    @unique
+  name          String?
+  status        String    @default("active") // "active", "whitelisted", "blacklisted"
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  videos        Video[]
+  likes         Like[]
+  lists         List[]
+  viewHistory   ViewHistory[]
+
+  @@map("users") // Supabase Auth の 'users' テーブルを直接参照
+}
+
+// ------------------------------------
+// 2. 動画 (Video)
+// ------------------------------------
+model Video {
+  id              String   @id @default(cuid())
+  title           String
+  description     String?
+
+  // R2 のオブジェクトキー (例: "user_uuid/video_cuid/original.mp4")
+  r2ObjectKey     String   @unique @map("r2_object_key")
+
+  // 事前圧縮された動画のパス (例: "user_uuid/video_cuid/720p.mp4")
+  r2CompressedPaths Json?    @map("r2_compressed_paths") // { "720p": "...", "360p": "..." }
+
+  // 元動画の URL (右スワイプ用)
+  originalUrl     String?  @map("original_url")
+
+  authorId        String   @map("author_id")
+  author          User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  hashtags        VideoHashtag[]
+  likes           Like[]
+  listItems       ListItem[]
+  viewHistory     ViewHistory[]
+
+  @@index([authorId])
+  @@map("videos")
+}
+
+// ------------------------------------
+// 3. インタラクション (Interaction)
+// ------------------------------------
+model Like {
+  userId  String @map("user_id")
+  videoId String @map("video_id")
+
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video   Video  @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@id([userId, videoId]) // 複合プライマリキー (一人が1動画に1いいね)
+  @@map("likes")
+}
+
+// 保存リスト（公開・非公開）
+model List {
+  id        String     @id @default(cuid())
+  name      String
+  isPublic  Boolean    @default(false) @map("is_public")
+
+  ownerId   String     @map("owner_id")
+  owner     User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  items     ListItem[]
+
+  @@map("lists")
+}
+
+// リストの中身
+model ListItem {
+  id        String @id @default(cuid())
+  listId    String @map("list_id")
+  videoId   String @map("video_id")
+
+  list      List   @relation(fields: [listId], references: [id], onDelete: Cascade)
+  video   Video  @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([listId, videoId]) // 1つのリストに同じ動画は1つまで
+  @@map("list_items")
+}
+
+// ------------------------------------
+// 4. 検索・推薦 (Search & Recommendation)
+// ------------------------------------
+model Hashtag {
+  id      String   @id @default(cuid())
+  name    String   @unique // (例: "React", "TypeScript")
+
+  videos  VideoHashtag[]
+
+  @@map("hashtags")
+}
+
+// 動画とハッシュタグの中間テーブル
+model VideoHashtag {
+  videoId   String   @map("video_id")
+  hashtagId String   @map("hashtag_id")
+
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  hashtag   Hashtag  @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
+
+  @@id([videoId, hashtagId])
+  @@map("video_hashtags")
+}
+
+// スワイプ履歴（推薦エンジン用）
+model ViewHistory {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  videoId   String   @map("video_id")
+
+  // 'swiped_away' (途中で離脱), 'watched_full' (最後まで見た)
+  action    String
+
+  watchedAt DateTime @default(now()) @map("watched_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video   Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@index([userId, watchedAt])
+  @@map("view_history")
+}
