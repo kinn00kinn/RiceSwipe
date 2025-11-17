@@ -1,12 +1,17 @@
+// app/login/page.tsx
 import { createServerComponentClient } from "@/lib/supabase/utils";
 import { headers, cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import type { PageProps } from "next";
 
-export default async function Login({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string | string[] | undefined };
-}) {
+export default async function Login(props: PageProps<"/login">) {
+  // Next 15 では searchParams が Promise なので await して中身を取得する
+  const searchParams = await props.searchParams;
+  const messageParam = searchParams?.message;
+  const message = Array.isArray(messageParam)
+    ? messageParam.join(",")
+    : messageParam;
+
   const signInWithGoogle = async () => {
     "use server";
 
@@ -25,7 +30,7 @@ export default async function Login({
       return redirect("/login?message=Could not authenticate with Google");
     }
 
-    return redirect(data.url);
+    return redirect((data as { url?: string }).url ?? "/");
   };
 
   return (
@@ -35,9 +40,10 @@ export default async function Login({
           Sign In with Google
         </button>
       </form>
-      {searchParams?.message && (
+
+      {message && (
         <p className="mt-4 p-4 bg-red-100 text-red-700 text-center rounded-md">
-          {searchParams.message}
+          {message}
         </p>
       )}
     </div>
