@@ -38,6 +38,18 @@ const HeartIcon = ({ isFilled }: { isFilled: boolean }) => (
   </svg>
 );
 
+const VolumeOnIcon = () => (
+  <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M11 5L6 9H2v6h4l5 4V5zM16.5 12a4.5 4.5 0 00-1.5-3.5v7A4.5 4.5 0 0016.5 12z" />
+  </svg>
+);
+const VolumeOffIcon = () => (
+  <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M9 5v14l7-7-7-7z" />
+    <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M19 5L5 19" />
+  </svg>
+);
+
 export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const progressRef = useRef<HTMLDivElement | null>(null);
@@ -50,6 +62,7 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
   const [ffDirection, setFfDirection] = useState<"forward" | "rewind" | null>(
     null
   );
+  const [isMuted, setIsMuted] = useState(false); // UI: allow unmuted audio
 
   // mutable refs
   const startRef = useRef<{ x: number; y: number; id?: number } | null>(null);
@@ -83,6 +96,7 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     const el = videoRef.current;
     if (!el) return;
     if (isActive) {
+      // attempt to play; browsers may block autoplay with sound until user interacts
       el.play().catch(() => {});
     } else {
       el.pause();
@@ -112,6 +126,13 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
       el.removeEventListener("timeupdate", onTime);
     };
   }, []);
+
+  // sync muted state with video element (UI only)
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    el.muted = isMuted;
+  }, [isMuted]);
 
   // helpers
   const clearLongPress = () => {
@@ -353,16 +374,19 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
   };
 
   return (
-    <div className="relative w-full md:max-w-sm h-screen snap-start bg-black select-none">
-      {/* Video Element - pointer events disabled to prevent native context menu */}
-      <video
-        ref={videoRef}
-        src={videoUrl}
-        loop
-        playsInline
-        muted
-        className="w-full h-full object-cover pointer-events-none"
-      />
+    <div className="relative w-full h-screen snap-start bg-black select-none overflow-hidden">
+      {/* Video wrapper - center video and make it fit width to avoid horizontal cropping */}
+      <div className="flex items-center justify-center h-full">
+        <video
+          ref={videoRef}
+          src={videoUrl}
+          loop
+          playsInline
+          // muted is controlled via UI (isMuted). Browsers may block autoplay with sound until user interaction.
+          muted={isMuted}
+          className="w-full h-auto max-h-full object-contain pointer-events-none"
+        />
+      </div>
 
       {/* Gesture Interaction Layer */}
       {/* This layer handles all taps and long presses, blocking context menu */}
@@ -384,7 +408,11 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
       />
 
       {/* UI Overlay Layer */}
-      <div className="absolute inset-0 flex flex-col justify-between p-4 pointer-events-none z-20">
+      <div
+        className="absolute inset-0 flex flex-col justify-between p-4 pointer-events-none z-20"
+        // ensure mobile safe-area and allow inner blocks to scroll if content is long
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
         {/* Fast Forward / Rewind Indicator */}
         <div className="flex justify-center pt-4">
           {longPressActive && ffDirection === "forward" && (
@@ -425,10 +453,11 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
         <div className="flex items-end gap-4">
           <div className="flex-grow pointer-events-auto">
             <div className="text-white">
-              <h3 className="font-bold text-lg">
-                {video.author.name || "Unknown"}
-              </h3>
-              <p className="text-sm">{video.title}</p>
+              <h3 className="font-bold text-lg">{video.author.name || "Unknown"}</h3>
+              {/* description/title area is scrollable so long text and scrollbars fit on mobile */}
+              <div className="mt-1 text-sm max-h-20 overflow-y-auto pr-2" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <p className="whitespace-pre-wrap">{video.title}</p>
+              </div>
             </div>
 
             {/* Progress Bar */}
@@ -446,7 +475,7 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
                 seekingRef.current = false;
               }}
             >
-              <div className="bg-white/20 w-full h-1 group-hover:h-2 transition-all duration-150">
+              <div className="bg-white/20 w-full h-1 group-hover:h-2 transition-all duration-150 rounded-full overflow-hidden">
                 <div
                   className="bg-white h-full"
                   style={{ width: `${progress}%` }}
@@ -455,7 +484,7 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
             </div>
           </div>
 
-          {/* Like Button */}
+          {/* Right-side controls (Like + Volume) */}
           <div className="flex flex-col items-center gap-4 pointer-events-auto pr-2">
             <button
               onClick={(e) => likeButton(e)}
@@ -468,6 +497,20 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
             >
               <HeartIcon isFilled={isLiked} />
               <span className="text-white text-sm font-bold">{likeCount}</span>
+            </button>
+
+            {/* Volume toggle - UI only */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                setIsMuted((s) => !s);
+              }}
+              className="p-2 rounded-md bg-black/40"
+              aria-pressed={isMuted}
+              aria-label={isMuted ? "Unmute" : "Mute"}
+            >
+              {isMuted ? <VolumeOffIcon /> : <VolumeOnIcon />}
             </button>
           </div>
         </div>
