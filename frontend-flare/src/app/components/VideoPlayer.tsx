@@ -38,6 +38,22 @@ const HeartIcon = ({ isFilled }: { isFilled: boolean }) => (
   </svg>
 );
 
+const FullscreenIcon = ({ filled }: { filled?: boolean }) => (
+  <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M8 3H5a2 2 0 00-2 2v3" />
+    <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M16 21h3a2 2 0 002-2v-3" />
+    <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M21 8V5a2 2 0 00-2-2h-3" />
+    <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M3 16v3a2 2 0 002 2h3" />
+  </svg>
+);
+
+const RotateIcon = () => (
+  <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-3.2-6.4" />
+    <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M21 3v6h-6" />
+  </svg>
+);
+
 const VolumeOnIcon = () => (
   <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
     <path d="M11 5L6 9H2v6h4l5 4V5zM16.5 12a4.5 4.5 0 00-1.5-3.5v7A4.5 4.5 0 0016.5 12z" />
@@ -51,6 +67,7 @@ const VolumeOffIcon = () => (
 );
 
 export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const progressRef = useRef<HTMLDivElement | null>(null);
 
@@ -63,6 +80,8 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     null
   );
   const [isMuted, setIsMuted] = useState(false); // UI: allow unmuted audio
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isLandscapeForced, setIsLandscapeForced] = useState(false);
 
   // mutable refs
   const startRef = useRef<{ x: number; y: number; id?: number } | null>(null);
@@ -127,12 +146,21 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     };
   }, []);
 
-  // sync muted state with video element (UI only)
+  // keep video muted state in sync
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
     el.muted = isMuted;
   }, [isMuted]);
+
+  // fullscreen change listener
+  useEffect(() => {
+    const onFs = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener("fullscreenchange", onFs);
+    return () => document.removeEventListener("fullscreenchange", onFs);
+  }, []);
 
   // helpers
   const clearLongPress = () => {
@@ -373,8 +401,85 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     doLike();
   };
 
+  // Fullscreen toggle
+  const toggleFullscreen = async () => {
+    const root = containerRef.current;
+    if (!root) return;
+    try {
+      if (!document.fullscreenElement) {
+        await root.requestFullscreen();
+        setIsFullscreen(true);
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    } catch (err) {
+      console.warn("Fullscreen API failed:", err);
+    }
+  };
+
+  // Try to lock/unlock screen orientation; fallback to a CSS-based forced landscape inside fullscreen
+  const toggleLandscape = async () => {
+    // If already forced, try to revert
+    if (isLandscapeForced) {
+      try {
+        if ((screen as any)?.orientation?.unlock) (screen as any).orientation.unlock();
+      } catch {}
+      document.body.classList.remove("vp-force-landscape");
+      setIsLandscapeForced(false);
+      return;
+    }
+
+    // Try native orientation lock first
+    try {
+      if ((screen as any)?.orientation?.lock) {
+        await (screen as any).orientation.lock("landscape-primary");
+        setIsLandscapeForced(true);
+        return;
+      }
+    } catch (err) {
+      // fall through to fullscreen+CSS fallback
+      console.warn("Orientation lock failed, falling back to CSS rotation", err);
+    }
+
+    // Fallback: request fullscreen and add a CSS class that rotates the player container.
+    try {
+      const root = containerRef.current;
+      if (root && !document.fullscreenElement) await root.requestFullscreen();
+      document.body.classList.add("vp-force-landscape");
+      setIsLandscapeForced(true);
+      setIsFullscreen(Boolean(document.fullscreenElement) || true);
+    } catch (err) {
+      console.warn("Fallback landscape failed:", err);
+    }
+  };
+
+  // Clean up on unmount: remove any forced classes / unlock orientation
+  useEffect(() => {
+    return () => {
+      try {
+        document.body.classList.remove("vp-force-landscape");
+        if ((screen as any)?.orientation?.unlock) (screen as any).orientation.unlock();
+      } catch {}
+    };
+  }, []);
+
   return (
-    <div className="relative w-full h-screen snap-start bg-black select-none overflow-hidden">
+    <div
+      ref={containerRef}
+      className={`relative w-full h-screen snap-start bg-black select-none overflow-hidden ${isLandscapeForced ? 'landscape-active' : ''}`}
+    >
+      {/* Inline styles for the fallback-force-landscape behavior.
+          Note: CSS fallback rotates the whole viewport container; on some browsers pointer coordinates may differ slightly.
+          We try native Screen Orientation API first and only use this fallback when lock isn't available. */}
+      <style>{`
+        /* Fallback forced landscape: rotate container 90deg and expand to fit viewport */
+        body.vp-force-landscape { overflow: hidden; }
+        .vp-force-landscape .landscape-active { position: fixed; left: 50%; top: 50%; width: 100vh; height: 100vw; transform: translate(-50%,-50%) rotate(90deg); transform-origin: center center; z-index: 10000; }
+        /* ensure our overlay UI remains usable when rotated */
+        .landscape-active .pointer-events-none { pointer-events: none; }
+      `}</style>
+
       {/* Video wrapper - center video and make it fit width to avoid horizontal cropping */}
       <div className="flex items-center justify-center h-full">
         <video
@@ -382,14 +487,12 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
           src={videoUrl}
           loop
           playsInline
-          // muted is controlled via UI (isMuted). Browsers may block autoplay with sound until user interaction.
           muted={isMuted}
           className="w-full h-auto max-h-full object-contain pointer-events-none"
         />
       </div>
 
       {/* Gesture Interaction Layer */}
-      {/* This layer handles all taps and long presses, blocking context menu */}
       <div
         className="absolute inset-0 z-10 outline-none"
         onPointerDown={onPointerDown}
@@ -410,9 +513,37 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
       {/* UI Overlay Layer */}
       <div
         className="absolute inset-0 flex flex-col justify-between p-4 pointer-events-none z-20"
-        // ensure mobile safe-area and allow inner blocks to scroll if content is long
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
+        {/* Top-right controls: fullscreen + rotate (pointer-events-auto) */}
+        <div className="flex justify-end">
+          <div className="flex gap-2 pointer-events-auto">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleLandscape();
+              }}
+              className="p-2 bg-black/40 rounded-full"
+              aria-pressed={isLandscapeForced}
+              title="Rotate to landscape"
+            >
+              <RotateIcon />
+            </button>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFullscreen();
+              }}
+              className="p-2 bg-black/40 rounded-full"
+              aria-pressed={isFullscreen}
+              title="Fullscreen"
+            >
+              <FullscreenIcon />
+            </button>
+          </div>
+        </div>
+
         {/* Fast Forward / Rewind Indicator */}
         <div className="flex justify-center pt-4">
           {longPressActive && ffDirection === "forward" && (
@@ -430,7 +561,6 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
         {/* Play/Pause Icon (Center) */}
         <div className="flex-grow flex items-center justify-center">
           {!isPlaying && !longPressActive && (
-            // Clickable play button (needs pointer-events-auto to bypass UI layer's none)
             <div
               className="p-4 rounded-full bg-black/50 pointer-events-auto"
               onClick={(e) => {
@@ -454,7 +584,6 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
           <div className="flex-grow pointer-events-auto">
             <div className="text-white">
               <h3 className="font-bold text-lg">{video.author.name || "Unknown"}</h3>
-              {/* description/title area is scrollable so long text and scrollbars fit on mobile */}
               <div className="mt-1 text-sm max-h-20 overflow-y-auto pr-2" style={{ WebkitOverflowScrolling: 'touch' }}>
                 <p className="whitespace-pre-wrap">{video.title}</p>
               </div>
