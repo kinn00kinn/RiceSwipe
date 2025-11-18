@@ -39,18 +39,58 @@ const HeartIcon = ({ isFilled }: { isFilled: boolean }) => (
 );
 
 const FullscreenIcon = ({ filled }: { filled?: boolean }) => (
-  <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-    <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M8 3H5a2 2 0 00-2 2v3" />
-    <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M16 21h3a2 2 0 002-2v-3" />
-    <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M21 8V5a2 2 0 00-2-2h-3" />
-    <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M3 16v3a2 2 0 002 2h3" />
+  <svg
+    className="w-6 h-6 text-white"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+  >
+    <path
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M8 3H5a2 2 0 00-2 2v3"
+    />
+    <path
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M16 21h3a2 2 0 002-2v-3"
+    />
+    <path
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M21 8V5a2 2 0 00-2-2h-3"
+    />
+    <path
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M3 16v3a2 2 0 002 2h3"
+    />
   </svg>
 );
 
 const RotateIcon = () => (
-  <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-    <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-3.2-6.4" />
-    <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M21 3v6h-6" />
+  <svg
+    className="w-6 h-6 text-white"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+  >
+    <path
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M21 12a9 9 0 11-3.2-6.4"
+    />
+    <path
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M21 3v6h-6"
+    />
   </svg>
 );
 
@@ -60,9 +100,24 @@ const VolumeOnIcon = () => (
   </svg>
 );
 const VolumeOffIcon = () => (
-  <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-    <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M9 5v14l7-7-7-7z" />
-    <path strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" d="M19 5L5 19" />
+  <svg
+    className="w-6 h-6 text-white"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+  >
+    <path
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M9 5v14l7-7-7-7z"
+    />
+    <path
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M19 5L5 19"
+    />
   </svg>
 );
 
@@ -157,6 +212,12 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
   useEffect(() => {
     const onFs = () => {
       setIsFullscreen(Boolean(document.fullscreenElement));
+      // give focus back to container in case of fullscreen changes
+      setTimeout(() => {
+        try {
+          (containerRef.current as HTMLElement | null)?.focus();
+        } catch {}
+      }, 0);
     };
     document.addEventListener("fullscreenchange", onFs);
     return () => document.removeEventListener("fullscreenchange", onFs);
@@ -409,6 +470,10 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
       if (!document.fullscreenElement) {
         await root.requestFullscreen();
         setIsFullscreen(true);
+        // focus so pointer capture / keyboard handling is stable
+        try {
+          (root as HTMLElement).focus();
+        } catch {}
       } else {
         await document.exitFullscreen();
         setIsFullscreen(false);
@@ -423,7 +488,8 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     // If already forced, try to revert
     if (isLandscapeForced) {
       try {
-        if ((screen as any)?.orientation?.unlock) (screen as any).orientation.unlock();
+        if ((screen as any)?.orientation?.unlock)
+          (screen as any).orientation.unlock();
       } catch {}
       document.body.classList.remove("vp-force-landscape");
       setIsLandscapeForced(false);
@@ -439,7 +505,10 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
       }
     } catch (err) {
       // fall through to fullscreen+CSS fallback
-      console.warn("Orientation lock failed, falling back to CSS rotation", err);
+      console.warn(
+        "Orientation lock failed, falling back to CSS rotation",
+        err
+      );
     }
 
     // Fallback: request fullscreen and add a CSS class that rotates the player container.
@@ -449,6 +518,9 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
       document.body.classList.add("vp-force-landscape");
       setIsLandscapeForced(true);
       setIsFullscreen(Boolean(document.fullscreenElement) || true);
+      try {
+        (root as HTMLElement).focus();
+      } catch {}
     } catch (err) {
       console.warn("Fallback landscape failed:", err);
     }
@@ -459,7 +531,8 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     return () => {
       try {
         document.body.classList.remove("vp-force-landscape");
-        if ((screen as any)?.orientation?.unlock) (screen as any).orientation.unlock();
+        if ((screen as any)?.orientation?.unlock)
+          (screen as any).orientation.unlock();
       } catch {}
     };
   }, []);
@@ -467,7 +540,10 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
   return (
     <div
       ref={containerRef}
-      className={`relative w-full h-screen snap-start bg-black select-none overflow-hidden ${isLandscapeForced ? 'landscape-active' : ''}`}
+      tabIndex={-1}
+      className={`relative w-full h-screen snap-start bg-black select-none overflow-hidden ${
+        isLandscapeForced ? "landscape-active" : ""
+      }`}
     >
       {/* Inline styles for the fallback-force-landscape behavior.
           Note: CSS fallback rotates the whole viewport container; on some browsers pointer coordinates may differ slightly.
@@ -476,8 +552,15 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
         /* Fallback forced landscape: rotate container 90deg and expand to fit viewport */
         body.vp-force-landscape { overflow: hidden; }
         .vp-force-landscape .landscape-active { position: fixed; left: 50%; top: 50%; width: 100vh; height: 100vw; transform: translate(-50%,-50%) rotate(90deg); transform-origin: center center; z-index: 10000; }
-        /* ensure our overlay UI remains usable when rotated */
-        .landscape-active .pointer-events-none { pointer-events: none; }
+
+        /* Ensure gesture and overlay layers remain interactive in rotated/fullscreen fallback */
+        .vp-force-landscape .ui-gesture,
+        .vp-force-landscape .ui-overlay,
+        .landscape-active .ui-gesture,
+        .landscape-active .ui-overlay {
+          pointer-events: auto !important;
+          -webkit-tap-highlight-color: transparent;
+        }
       `}</style>
 
       {/* Video wrapper - center video and make it fit width to avoid horizontal cropping */}
@@ -492,9 +575,9 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
         />
       </div>
 
-      {/* Gesture Interaction Layer */}
+      {/* Gesture Interaction Layer - must be pointer-events:auto so it works in fullscreen */}
       <div
-        className="absolute inset-0 z-10 outline-none"
+        className="absolute inset-0 z-10 ui-gesture"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -510,9 +593,10 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
         style={{ touchAction: "pan-y" }} // Allows vertical scroll but captures horizontal
       />
 
-      {/* UI Overlay Layer */}
+      {/* UI Overlay Layer (visual controls). Keep pointer-events-none by default so gestures go through,
+          but clickable controls inside use pointer-events-auto. */}
       <div
-        className="absolute inset-0 flex flex-col justify-between p-4 pointer-events-none z-20"
+        className="absolute inset-0 flex flex-col justify-between p-4 pointer-events-none z-20 ui-overlay"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         {/* Top-right controls: fullscreen + rotate (pointer-events-auto) */}
@@ -547,12 +631,12 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
         {/* Fast Forward / Rewind Indicator */}
         <div className="flex justify-center pt-4">
           {longPressActive && ffDirection === "forward" && (
-            <div className="bg-black/60 text-white px-3 py-1 rounded-full text-sm font-bold">
+            <div className="bg-black/60 text-white px-3 py-1 rounded-full text-sm font-bold pointer-events-auto">
               &raquo; {FAST_FORWARD_RATE}x
             </div>
           )}
           {longPressActive && ffDirection === "rewind" && (
-            <div className="bg-black/60 text-white px-3 py-1 rounded-full text-sm font-bold">
+            <div className="bg-black/60 text-white px-3 py-1 rounded-full text-sm font-bold pointer-events-auto">
               &laquo; rewind
             </div>
           )}
@@ -583,8 +667,13 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
         <div className="flex items-end gap-4">
           <div className="flex-grow pointer-events-auto">
             <div className="text-white">
-              <h3 className="font-bold text-lg">{video.author.name || "Unknown"}</h3>
-              <div className="mt-1 text-sm max-h-20 overflow-y-auto pr-2" style={{ WebkitOverflowScrolling: 'touch' }}>
+              <h3 className="font-bold text-lg">
+                {video.author.name || "Unknown"}
+              </h3>
+              <div
+                className="mt-1 text-sm max-h-20 overflow-y-auto pr-2"
+                style={{ WebkitOverflowScrolling: "touch" }}
+              >
                 <p className="whitespace-pre-wrap">{video.title}</p>
               </div>
             </div>
@@ -596,7 +685,7 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={Math.round(progress)}
-              className="w-full h-6 cursor-pointer group pointer-events-auto mt-2"
+              className="w-full h-20 cursor-pointer group pointer-events-auto mt-2"
               onPointerDown={onProgressDown}
               onPointerMove={onProgressMove}
               onPointerUp={onProgressUp}
@@ -614,7 +703,7 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
           </div>
 
           {/* Right-side controls (Like + Volume) */}
-          <div className="flex flex-col items-center gap-4 pointer-events-auto pr-2">
+          <div className="flex flex-col items-center gap-4 pointer-events-auto pr-2 h-40">
             <button
               onClick={(e) => likeButton(e)}
               onPointerDown={(e) => {
@@ -635,7 +724,7 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
                 e.preventDefault();
                 setIsMuted((s) => !s);
               }}
-              className="p-2 rounded-md bg-black/40"
+              className="p-2 rounded-md bg-black/40 "
               aria-pressed={isMuted}
               aria-label={isMuted ? "Unmute" : "Mute"}
             >
