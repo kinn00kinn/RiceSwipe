@@ -1,73 +1,104 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { useSwipeable } from "react-swipeable";
-import useSWR from "swr";
-import type { Video as VideoType } from "@prisma/client";
-import VideoPlayer from "./VideoPlayer";
+import React, { useEffect, useRef, useState } from 'react';
+import useSWR from 'swr';
+import type { Video as VideoType } from '@prisma/client';
+import Slide from './Slide'; // ※ Slideコンポーネントが存在することを確認してください
 
-// APIレスポンスの型を拡張
-type VideoWithAuthor = VideoType & {
-  author: {
-    id: string;
-    name: string | null;
-  };
+type VideoFromApi = VideoType & {
+  author: { id: string; name: string | null };
+  likeCount: number;
+  isLiked: boolean;
 };
 
-// SWRのためのfetcher関数
-const fetcher = (url: string): Promise<VideoWithAuthor[]> =>
-  fetch(url).then((res) => res.json());
+const fetcher = async (url: string): Promise<VideoFromApi[]> => {
+  const res = await fetch(url);
+  if (!res.ok) {
+    const err: any = new Error('Failed to fetch');
+    try { err.info = await res.json(); } catch {}
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+};
 
 export default function VideoFeed() {
-  const {
-    data: videos,
-    error,
-    isLoading,
-  } = useSWR<VideoWithAuthor[]>("/api/feed", fetcher);
+  const { data: videos, error, isLoading } = useSWR<VideoFromApi[]>('/api/feed', fetcher);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const slideRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  const handlers = useSwipeable({
-    onSwipedUp: () => {
-      if (!videos) return;
-      setCurrentIndex((prevIndex) =>
-        Math.min(prevIndex + 1, videos.length - 1)
-      );
-    },
-    onSwipedDown: () => {
-      setCurrentIndex((prevIndex) => Math.max(prevIndex - 1, 0));
-    },
-    preventScrollOnSwipe: true,
-    trackMouse: true,
-  });
+  // IntersectionObserver でアクティブスライドを決める
+  useEffect(() => {
+    if (!videos || videos.length === 0) return;
+    const root = containerRef.current;
+    if (!root) return;
 
-  if (isLoading) {
-    return <div className="text-center">Loading feed...</div>;
-  }
+    const options: IntersectionObserverInit = {
+      root,
+      rootMargin: '0px',
+      threshold: 0.55,
+    };
 
-  if (error || !videos) {
-    return (
-      <div className="text-center text-red-500">
-        Error: {error?.message || "Failed to load videos."}
-      </div>
-    );
-  }
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const idx = Number(entry.target.getAttribute('data-index'));
+        if (entry.intersectionRatio >= 0.55) {
+          setCurrentIndex(idx);
+        }
+      });
+    }, options);
 
-  if (videos.length === 0) {
-    return <div className="text-center">No videos found.</div>;
-  }
+    slideRefs.current.forEach((el) => { if (el) obs.observe(el); });
+
+    return () => obs.disconnect();
+  }, [videos]);
+
+  if (isLoading) return <div className="text-center text-white">Loading...</div>;
+  if (error || !videos) return <div className="text-center text-red-500">Error loading feed</div>;
+  if (videos.length === 0) return <div className="text-center text-white">No videos</div>;
 
   return (
     <div
-      {...handlers}
-      className="relative w-full h-[80vh] max-w-md mx-auto bg-black rounded-lg overflow-hidden"
+      ref={containerRef}
+      className="video-feed-container"
+      // inline style で確実に上書き。これが無いとネイティブスクロールは発生しない
+      style={{
+        height: '100vh',
+        overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch', // iOS スムーススクロール
+        scrollSnapType: 'y mandatory',
+        touchAction: 'pan-y', // allow vertical pan
+      }}
     >
-      {videos.map((video, index) => (
+      {videos.map((video, i) => (
         <div
           key={video.id}
-          className="absolute w-full h-full transition-transform duration-500"
-          style={{ transform: `translateY(${(index - currentIndex) * 100}%)` }}
+          // [修正] アロー関数をブロック {} にして値を返さないようにしました
+          ref={(el) => { slideRefs.current[i] = el; }}
+          data-index={i}
+          // 各スライドを画面高さに合わせ、スクロールスナップを効かせる
+          style={{
+            height: '100vh',
+            scrollSnapAlign: 'start',
+          }}
         >
-          <VideoPlayer video={video} isActive={index === currentIndex} />
+          <Slide
+            video={video}
+            index={i}
+            currentIndex={currentIndex}
+            onRequestNext={() => {
+              // optional programmatic scroll to next slide
+              const next = Math.min(i + 1, videos.length - 1);
+              const nextEl = slideRefs.current[next];
+              if (nextEl) nextEl.scrollIntoView({ behavior: 'smooth' });
+            }}
+            onRequestPrev={() => {
+              const prev = Math.max(i - 1, 0);
+              const prevEl = slideRefs.current[prev];
+              if (prevEl) prevEl.scrollIntoView({ behavior: 'smooth' });
+            }}
+          />
         </div>
       ))}
     </div>
