@@ -179,14 +179,14 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     rewindLastRef.current = null;
   };
 
-  // long press start (do not capture immediately — capture only when long press confirmed)
+  // long press start
   const startLongPressTimer = (pointerId?: number, target?: Element) => {
     clearLongPress();
     longPressTimerRef.current = window.setTimeout(() => {
       setLongPressActive(true);
       setFfDirection("forward");
       if (videoRef.current) videoRef.current.playbackRate = FAST_FORWARD_RATE;
-      // capture pointer on video element so moves and up are reliably received
+
       if (pointerId !== undefined && target) {
         try {
           target.setPointerCapture?.(pointerId);
@@ -198,6 +198,7 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
   const onPointerDown = (e: React.PointerEvent) => {
     // record start pos
     startRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+
     // double tap detection
     const now = Date.now();
     if (
@@ -221,10 +222,10 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     lastTapTimeRef.current = now;
     lastTapPosRef.current = { x: e.clientX, y: e.clientY };
 
-    // start long press timer — pass pointer id and target so we can capture on long-press
+    // start long press timer
     startLongPressTimer(e.pointerId, e.currentTarget as Element);
 
-    // schedule single tap fallback (kept minimal)
+    // schedule single tap fallback
     clearSingleTap();
     singleTapTimerRef.current = window.setTimeout(() => {
       singleTapTimerRef.current = null;
@@ -239,11 +240,9 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     const adx = Math.abs(dx);
     const ady = Math.abs(dy);
 
-    // if movement clearly vertical before long press -> cancel long press (so parent Slide can handle)
+    // if movement clearly vertical before long press -> cancel long press (allow scroll)
     if (!longPressActive && ady > MOVE_THRESHOLD && ady > adx) {
-      // cancel long-press (allow parent slide to see this)
       clearLongPress();
-      // do not call preventDefault so parent can scroll/slide
     }
 
     if (longPressActive) {
@@ -265,7 +264,6 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
             startRewind();
           }
         }
-        // prevent parent vertical scroll while performing horizontal ff/rewind
         e.preventDefault();
       }
     }
@@ -277,14 +275,13 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
 
   const onPointerUp = (e: React.PointerEvent) => {
     clearLongPress();
-    // release pointer capture if we captured it on the target
     const id = startRef.current?.id;
     if (id !== undefined) {
       try {
         (e.currentTarget as Element).releasePointerCapture?.(id);
       } catch {}
     }
-    // if long press active -> stop ff/rewind
+
     if (longPressActive) {
       setLongPressActive(false);
       if (ffDirection === "forward") {
@@ -309,9 +306,8 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     const dy = s ? Math.abs(e.clientY - s.y) : 0;
     startRef.current = null;
 
-    // small movement => single tap (toggle). If double-tap already handled, lastTapTimeRef will be cleared earlier.
+    // small movement => single tap
     if (dx <= MOVE_THRESHOLD && dy <= MOVE_THRESHOLD) {
-      // toggle play
       togglePlay();
     }
   };
@@ -357,14 +353,21 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
   };
 
   return (
-    <div className="relative w-full md:max-w-sm h-screen snap-start bg-black">
+    <div className="relative w-full md:max-w-sm h-screen snap-start bg-black select-none">
+      {/* Video Element - pointer events disabled to prevent native context menu */}
       <video
         ref={videoRef}
         src={videoUrl}
         loop
         playsInline
         muted
-        className="w-full h-full object-cover"
+        className="w-full h-full object-cover pointer-events-none"
+      />
+
+      {/* Gesture Interaction Layer */}
+      {/* This layer handles all taps and long presses, blocking context menu */}
+      <div
+        className="absolute inset-0 z-10 outline-none"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -376,24 +379,30 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
           seekingRef.current = false;
           startRef.current = null;
         }}
+        onContextMenu={(e) => e.preventDefault()} // Blocks 'Save Video' menu
+        style={{ touchAction: "pan-y" }} // Allows vertical scroll but captures horizontal
       />
 
-      <div className="absolute inset-0 flex flex-col justify-between p-4 pointer-events-none">
-        <div className="flex justify-center">
+      {/* UI Overlay Layer */}
+      <div className="absolute inset-0 flex flex-col justify-between p-4 pointer-events-none z-20">
+        {/* Fast Forward / Rewind Indicator */}
+        <div className="flex justify-center pt-4">
           {longPressActive && ffDirection === "forward" && (
-            <div className="bg-black/60 text-white px-3 py-1 rounded-full text-sm font-bold pointer-events-auto">
+            <div className="bg-black/60 text-white px-3 py-1 rounded-full text-sm font-bold">
               &raquo; {FAST_FORWARD_RATE}x
             </div>
           )}
           {longPressActive && ffDirection === "rewind" && (
-            <div className="bg-black/60 text-white px-3 py-1 rounded-full text-sm font-bold pointer-events-auto">
+            <div className="bg-black/60 text-white px-3 py-1 rounded-full text-sm font-bold">
               &laquo; rewind
             </div>
           )}
         </div>
 
+        {/* Play/Pause Icon (Center) */}
         <div className="flex-grow flex items-center justify-center">
           {!isPlaying && !longPressActive && (
+            // Clickable play button (needs pointer-events-auto to bypass UI layer's none)
             <div
               className="p-4 rounded-full bg-black/50 pointer-events-auto"
               onClick={(e) => {
@@ -412,6 +421,7 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
           )}
         </div>
 
+        {/* Bottom Controls */}
         <div className="flex items-end gap-4">
           <div className="flex-grow pointer-events-auto">
             <div className="text-white">
@@ -421,6 +431,7 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
               <p className="text-sm">{video.title}</p>
             </div>
 
+            {/* Progress Bar */}
             <div
               ref={progressRef}
               role="slider"
@@ -444,6 +455,7 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
             </div>
           </div>
 
+          {/* Like Button */}
           <div className="flex flex-col items-center gap-4 pointer-events-auto pr-2">
             <button
               onClick={(e) => likeButton(e)}
