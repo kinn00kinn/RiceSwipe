@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import type { Video as VideoType } from '@prisma/client';
-import Slide from './Slide';
+import Slide from './Slide'; // ※ Slideコンポーネントが存在することを確認してください
 
 type VideoFromApi = VideoType & {
   author: { id: string; name: string | null };
@@ -28,9 +28,8 @@ export default function VideoFeed() {
   const slideRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // IntersectionObserver でアクティブスライドを決める（任意）
+  // IntersectionObserver でアクティブスライドを決める
   useEffect(() => {
-    // console.log(videos);
     if (!videos || videos.length === 0) return;
     const root = containerRef.current;
     if (!root) return;
@@ -75,7 +74,8 @@ export default function VideoFeed() {
       {videos.map((video, i) => (
         <div
           key={video.id}
-          ref={(el) => (slideRefs.current[i] = el)}
+          // [修正] アロー関数をブロック {} にして値を返さないようにしました
+          ref={(el) => { slideRefs.current[i] = el; }}
           data-index={i}
           // 各スライドを画面高さに合わせ、スクロールスナップを効かせる
           style={{
