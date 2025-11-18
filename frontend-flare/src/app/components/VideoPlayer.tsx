@@ -38,6 +38,13 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
 
   const videoUrl = `${R2_PUBLIC_DOMAIN}/${video.r2ObjectKey}`;
 
+  // const videoUrl = `${R2_PUBLIC_DOMAIN}/${video.r2ObjectKey}`;
+
+  // ↓ デバッグ用に追加
+  // console.log("R2 Domain:", R2_PUBLIC_DOMAIN);
+  // console.log("R2 Key:", video.r2ObjectKey);
+  // console.log("Final Video URL:", videoUrl);
+
   // アクティブ状態に応じて再生/停止を制御
   useEffect(() => {
     const videoElement = videoRef.current;
