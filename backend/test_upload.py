@@ -32,7 +32,9 @@ s3_client = boto3.client(
     region_name='auto',
     config=boto3.session.Config(
         signature_version='s3v4',
-        retries={'max_attempts': 3, 'mode': 'standard'}
+        retries={'max_attempts': 3, 'mode': 'standard'},
+        connect_timeout=30,
+        read_timeout=300
     )
 )
 
@@ -72,9 +74,9 @@ def upload_video_to_r2(file_path: str, user_id: str = "test-user",
         if not title:
             title = Path(file_path).stem
         
-        # ユニークなIDとオブジェクトキーを生成
+        # ユニークなIDとオブジェクトキーを生成（フロントエンドと同じ形式）
         video_id = str(uuid4())
-        object_key = f"{user_id}/{video_id}-{file_name}"
+        object_key = f"{user_id}/{video_id}/{file_name}"
         
         print(f"\n📤 アップロード開始...")
         print(f"   動画ID: {video_id}")
@@ -94,13 +96,44 @@ def upload_video_to_r2(file_path: str, user_id: str = "test-user",
         print(f"\n🔄 R2にアップロード中...", end='', flush=True)
         start_time = time.time()
         
-        with open(file_path, 'rb') as file_data:
-            s3_client.put_object(
-                Bucket=R2_BUCKET_NAME,
-                Key=object_key,
-                Body=file_data,
-                ContentType=content_type
-            )
+        # 大きなファイルの場合はマルチパートアップロード
+        if file_size > 10 * 1024 * 1024:  # 10MB以上
+            print(f"\n   (マルチパートアップロードを使用)")
+            try:
+                # マルチパートアップロードを使用
+                s3_client.upload_file(
+                    file_path,
+                    R2_BUCKET_NAME,
+                    object_key,
+                    ExtraArgs={
+                        'ContentType': content_type
+                    },
+                    Config=boto3.s3.transfer.TransferConfig(
+                        multipart_threshold=10 * 1024 * 1024,  # 10MB
+                        multipart_chunksize=10 * 1024 * 1024,  # 10MB chunks
+                        max_concurrency=4,
+                        use_threads=True
+                    )
+                )
+            except Exception as e:
+                print(f"\n   ❌ マルチパートアップロード失敗: {str(e)}")
+                print(f"   🔄 通常アップロードで再試行中...", end='', flush=True)
+                with open(file_path, 'rb') as file_data:
+                    s3_client.put_object(
+                        Bucket=R2_BUCKET_NAME,
+                        Key=object_key,
+                        Body=file_data,
+                        ContentType=content_type
+                    )
+        else:
+            # 小さいファイルは通常のput_object
+            with open(file_path, 'rb') as file_data:
+                s3_client.put_object(
+                    Bucket=R2_BUCKET_NAME,
+                    Key=object_key,
+                    Body=file_data,
+                    ContentType=content_type
+                )
         
         upload_time = time.time() - start_time
         print(f" 完了! ({upload_time:.2f}秒)")
