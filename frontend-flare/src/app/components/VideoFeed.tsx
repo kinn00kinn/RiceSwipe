@@ -17,6 +17,12 @@ type VideoFromApi = VideoType & {
   isLiked: boolean;
 };
 
+// Define a custom error type for fetcher
+interface FetcherError extends Error {
+  info?: any;
+  status?: number;
+}
+
 // SWRのためのfetcher関数
 const fetcher = async (url: string): Promise<VideoFromApi[]> => {
   const res = await fetch(url);
@@ -24,7 +30,7 @@ const fetcher = async (url: string): Promise<VideoFromApi[]> => {
   // If the status code is not in the range 200-299,
   // we still try to parse and throw it.
   if (!res.ok) {
-    const error = new Error("An error occurred while fetching the data.");
+    const error: FetcherError = new Error("An error occurred while fetching the data.");
     // Attach extra info to the error object.
     try {
       error.info = await res.json();

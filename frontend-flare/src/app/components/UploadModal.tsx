@@ -2,6 +2,14 @@
 
 import { useState, useCallback, ChangeEvent } from "react";
 import { Button } from "./ui/Button";
+import { z } from 'zod'; // Added Zod import
+
+// Define Zod schema for the sign API response
+const SignApiResponseSchema = z.object({
+  uploadUrl: z.string().url(),
+  videoId: z.string().uuid(),
+  objectKey: z.string().min(1),
+});
 
 interface UploadModalProps {
   onClose: () => void;
@@ -72,7 +80,14 @@ export default function UploadModal({ onClose }: UploadModalProps) {
         throw new Error("Failed to get upload signature.");
       }
 
-      const { uploadUrl, videoId, objectKey } = await signResponse.json();
+      const signApiData = await signResponse.json();
+      const validationResult = SignApiResponseSchema.safeParse(signApiData);
+
+      if (!validationResult.success) {
+        throw new Error(`Invalid sign API response: ${validationResult.error.message}`);
+      }
+
+      const { uploadUrl, videoId, objectKey } = validationResult.data;
 
       // 2. Upload file to R2 using XMLHttpRequest to track progress
       await new Promise<void>((resolve, reject) => {

@@ -3,8 +3,9 @@ import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { z } from 'zod';
 
-export const runtime = 'edge';
+// export const runtime = 'edge';
 
 export async function POST(request: NextRequest) {
   // Add defensive checks for environment variables
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -48,12 +49,24 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     return new NextResponse(JSON.stringify({ error: 'Invalid JSON body' }), { status: 400 });
   }
-  
-  const { filename, contentType } = body;
 
-  if (!filename || !contentType) {
-    return new NextResponse(JSON.stringify({ error: 'Filename and contentType are required' }), { status: 400 });
+  // Define Zod schema for the request body
+  const UploadSignSchema = z.object({
+    filename: z.string().min(1, "Filename is required"),
+    contentType: z.string().min(1, "ContentType is required"),
+  });
+
+  // Validate the request body using Zod
+  const validationResult = UploadSignSchema.safeParse(body);
+
+  if (!validationResult.success) {
+    return new NextResponse(
+      JSON.stringify({ error: 'Invalid request body', details: validationResult.error.flatten() }),
+      { status: 400 }
+    );
   }
+
+  const { filename, contentType } = validationResult.data;
 
   const r2 = new S3Client({
     region: 'auto',

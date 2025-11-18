@@ -5,7 +5,7 @@ import { Button } from "../components/ui/Button";
 
 // Define the props type for the async component
 type LoginPageProps = {
-  searchParams?: { message?: string };
+  searchParams?: Promise<{ message?: string }>;
 };
 
 // Google Icon SVG component
@@ -16,12 +16,13 @@ const GoogleIcon = () => (
 );
 
 export default async function Login({ searchParams }: LoginPageProps) {
-  const message = searchParams?.message;
+  const resolvedSearchParams = await searchParams;
+  const message = resolvedSearchParams?.message;
 
   const signInWithGoogle = async () => {
     "use server";
 
-    const origin = headers().get("origin");
+    const origin = (await headers()).get("origin");
     const supabase = await createServerComponentClient();
 
     const { data, error } = await supabase.auth.signInWithOAuth({

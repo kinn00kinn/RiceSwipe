@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-export const runtime = 'edge';
+// export const runtime = 'edge';
 
 export async function GET() {
   // Per the Next.js error, we should await cookies()
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
