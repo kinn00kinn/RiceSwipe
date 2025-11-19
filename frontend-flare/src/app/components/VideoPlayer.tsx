@@ -21,9 +21,10 @@ const DOUBLE_TAP_WINDOW = 300;
 const FAST_FORWARD_RATE = 2.0;
 const REWIND_SPEED_SEC_PER_SEC = 3.0;
 
+// 視認性向上のため drop-shadow-md を追加
 const HeartIcon = ({ isFilled }: { isFilled: boolean }) => (
   <svg
-    className="w-8 h-8 text-white"
+    className="w-8 h-8 text-white drop-shadow-md"
     fill={isFilled ? "currentColor" : "none"}
     stroke="currentColor"
     viewBox="0 0 24 24"
@@ -38,70 +39,18 @@ const HeartIcon = ({ isFilled }: { isFilled: boolean }) => (
   </svg>
 );
 
-const FullscreenIcon = ({ filled }: { filled?: boolean }) => (
-  <svg
-    className="w-6 h-6 text-white"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-  >
-    <path
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M8 3H5a2 2 0 00-2 2v3"
-    />
-    <path
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M16 21h3a2 2 0 002-2v-3"
-    />
-    <path
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M21 8V5a2 2 0 00-2-2h-3"
-    />
-    <path
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M3 16v3a2 2 0 002 2h3"
-    />
-  </svg>
-);
-
-const RotateIcon = () => (
-  <svg
-    className="w-6 h-6 text-white"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-  >
-    <path
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M21 12a9 9 0 11-3.2-6.4"
-    />
-    <path
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M21 3v6h-6"
-    />
-  </svg>
-);
-
 const VolumeOnIcon = () => (
-  <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
+  <svg
+    className="w-6 h-6 text-white drop-shadow-md"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+  >
     <path d="M11 5L6 9H2v6h4l5 4V5zM16.5 12a4.5 4.5 0 00-1.5-3.5v7A4.5 4.5 0 0016.5 12z" />
   </svg>
 );
 const VolumeOffIcon = () => (
   <svg
-    className="w-6 h-6 text-white"
+    className="w-6 h-6 text-white drop-shadow-md"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -134,9 +83,7 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
   const [ffDirection, setFfDirection] = useState<"forward" | "rewind" | null>(
     null
   );
-  const [isMuted, setIsMuted] = useState(false); // UI: allow unmuted audio
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isLandscapeForced, setIsLandscapeForced] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
 
   // mutable refs
   const startRef = useRef<{ x: number; y: number; id?: number } | null>(null);
@@ -170,7 +117,6 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     const el = videoRef.current;
     if (!el) return;
     if (isActive) {
-      // attempt to play; browsers may block autoplay with sound until user interacts
       el.play().catch(() => {});
     } else {
       el.pause();
@@ -207,21 +153,6 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     if (!el) return;
     el.muted = isMuted;
   }, [isMuted]);
-
-  // fullscreen change listener
-  useEffect(() => {
-    const onFs = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
-      // give focus back to container in case of fullscreen changes
-      setTimeout(() => {
-        try {
-          (containerRef.current as HTMLElement | null)?.focus();
-        } catch {}
-      }, 0);
-    };
-    document.addEventListener("fullscreenchange", onFs);
-    return () => document.removeEventListener("fullscreenchange", onFs);
-  }, []);
 
   // helpers
   const clearLongPress = () => {
@@ -306,10 +237,8 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
-    // record start pos
     startRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
 
-    // double tap detection
     const now = Date.now();
     if (
       lastTapTimeRef.current &&
@@ -320,7 +249,6 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
         const dx = Math.abs(lastPos.x - e.clientX);
         const dy = Math.abs(lastPos.y - e.clientY);
         if (dx < 30 && dy < 30) {
-          // double tap -> like
           clearSingleTap();
           lastTapTimeRef.current = null;
           lastTapPosRef.current = null;
@@ -332,10 +260,8 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     lastTapTimeRef.current = now;
     lastTapPosRef.current = { x: e.clientX, y: e.clientY };
 
-    // start long press timer
     startLongPressTimer(e.pointerId, e.currentTarget as Element);
 
-    // schedule single tap fallback
     clearSingleTap();
     singleTapTimerRef.current = window.setTimeout(() => {
       singleTapTimerRef.current = null;
@@ -350,16 +276,13 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     const adx = Math.abs(dx);
     const ady = Math.abs(dy);
 
-    // if movement clearly vertical before long press -> cancel long press (allow scroll)
     if (!longPressActive && ady > MOVE_THRESHOLD && ady > adx) {
       clearLongPress();
     }
 
     if (longPressActive) {
-      // if long press active, check horizontal direction
       if (adx > MOVE_THRESHOLD && adx > ady) {
         if (dx > 0) {
-          // right -> forward
           if (ffDirection !== "forward") {
             setFfDirection("forward");
             stopRewind();
@@ -367,7 +290,6 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
               videoRef.current.playbackRate = FAST_FORWARD_RATE;
           }
         } else {
-          // left -> rewind
           if (ffDirection !== "rewind") {
             setFfDirection("rewind");
             if (videoRef.current) videoRef.current.playbackRate = 1.0;
@@ -416,13 +338,11 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     const dy = s ? Math.abs(e.clientY - s.y) : 0;
     startRef.current = null;
 
-    // small movement => single tap
     if (dx <= MOVE_THRESHOLD && dy <= MOVE_THRESHOLD) {
       togglePlay();
     }
   };
 
-  // progress handlers
   const onProgressDown = (e: React.PointerEvent) => {
     e.stopPropagation();
     e.preventDefault();
@@ -462,108 +382,13 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     doLike();
   };
 
-  // Fullscreen toggle
-  const toggleFullscreen = async () => {
-    const root = containerRef.current;
-    if (!root) return;
-    try {
-      if (!document.fullscreenElement) {
-        await root.requestFullscreen();
-        setIsFullscreen(true);
-        // focus so pointer capture / keyboard handling is stable
-        try {
-          (root as HTMLElement).focus();
-        } catch {}
-      } else {
-        await document.exitFullscreen();
-        setIsFullscreen(false);
-      }
-    } catch (err) {
-      console.warn("Fullscreen API failed:", err);
-    }
-  };
-
-  // Try to lock/unlock screen orientation; fallback to a CSS-based forced landscape inside fullscreen
-  const toggleLandscape = async () => {
-    // If already forced, try to revert
-    if (isLandscapeForced) {
-      try {
-        if ((screen as any)?.orientation?.unlock)
-          (screen as any).orientation.unlock();
-      } catch {}
-      document.body.classList.remove("vp-force-landscape");
-      setIsLandscapeForced(false);
-      return;
-    }
-
-    // Try native orientation lock first
-    try {
-      if ((screen as any)?.orientation?.lock) {
-        await (screen as any).orientation.lock("landscape-primary");
-        setIsLandscapeForced(true);
-        return;
-      }
-    } catch (err) {
-      // fall through to fullscreen+CSS fallback
-      console.warn(
-        "Orientation lock failed, falling back to CSS rotation",
-        err
-      );
-    }
-
-    // Fallback: request fullscreen and add a CSS class that rotates the player container.
-    try {
-      const root = containerRef.current;
-      if (root && !document.fullscreenElement) await root.requestFullscreen();
-      document.body.classList.add("vp-force-landscape");
-      setIsLandscapeForced(true);
-      setIsFullscreen(Boolean(document.fullscreenElement) || true);
-      try {
-        (root as HTMLElement).focus();
-      } catch {}
-    } catch (err) {
-      console.warn("Fallback landscape failed:", err);
-    }
-  };
-
-  // Clean up on unmount: remove any forced classes / unlock orientation
-  useEffect(() => {
-    return () => {
-      try {
-        document.body.classList.remove("vp-force-landscape");
-        if ((screen as any)?.orientation?.unlock)
-          (screen as any).orientation.unlock();
-      } catch {}
-    };
-  }, []);
-
   return (
     <div
       ref={containerRef}
       tabIndex={-1}
-      className={`relative w-full h-screen snap-start bg-black select-none overflow-hidden ${
-        isLandscapeForced ? "landscape-active" : ""
-      }`}
+      className="relative w-full h-screen snap-start bg-black select-none overflow-hidden"
     >
-      {/* Inline styles for the fallback-force-landscape behavior.
-          Note: CSS fallback rotates the whole viewport container; on some browsers pointer coordinates may differ slightly.
-          We try native Screen Orientation API first and only use this fallback when lock isn't available. */}
-      <style>{`
-        /* Fallback forced landscape: rotate container 90deg and expand to fit viewport */
-        body.vp-force-landscape { overflow: hidden; }
-        .vp-force-landscape .landscape-active { position: fixed; left: 50%; top: 50%; width: 100vh; height: 100vw; transform: translate(-50%,-50%) rotate(90deg); transform-origin: center center; z-index: 10000; }
-
-        /* Ensure gesture and overlay layers remain interactive in rotated/fullscreen fallback */
-        .vp-force-landscape .ui-gesture,
-        .vp-force-landscape .ui-overlay,
-        .landscape-active .ui-gesture,
-        .landscape-active .ui-overlay {
-          pointer-events: auto !important;
-          -webkit-tap-highlight-color: transparent;
-        }
-      `}</style>
-
-      {/* Video wrapper - center video and make it fit width to avoid horizontal cropping */}
+      {/* Video wrapper */}
       <div className="flex items-center justify-center h-full">
         <video
           ref={videoRef}
@@ -575,7 +400,7 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
         />
       </div>
 
-      {/* Gesture Interaction Layer - must be pointer-events:auto so it works in fullscreen */}
+      {/* Gesture Interaction Layer */}
       <div
         className="absolute inset-0 z-10 ui-gesture"
         onPointerDown={onPointerDown}
@@ -589,54 +414,24 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
           seekingRef.current = false;
           startRef.current = null;
         }}
-        onContextMenu={(e) => e.preventDefault()} // Blocks 'Save Video' menu
-        style={{ touchAction: "pan-y" }} // Allows vertical scroll but captures horizontal
+        onContextMenu={(e) => e.preventDefault()}
+        style={{ touchAction: "pan-y" }}
       />
 
-      {/* UI Overlay Layer (visual controls). Keep pointer-events-none by default so gestures go through,
-          but clickable controls inside use pointer-events-auto. */}
+      {/* UI Overlay Layer */}
       <div
-        className="absolute inset-0 flex flex-col justify-between p-4 pointer-events-none z-20 ui-overlay"
+        className="absolute inset-0 flex flex-col justify-between pointer-events-none z-20 ui-overlay"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        {/* Top-right controls: fullscreen + rotate (pointer-events-auto) */}
-        <div className="flex justify-end">
-          <div className="flex gap-2 pointer-events-auto">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleLandscape();
-              }}
-              className="p-2 bg-black/40 rounded-full"
-              aria-pressed={isLandscapeForced}
-              title="Rotate to landscape"
-            >
-              <RotateIcon />
-            </button>
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleFullscreen();
-              }}
-              className="p-2 bg-black/40 rounded-full"
-              aria-pressed={isFullscreen}
-              title="Fullscreen"
-            >
-              <FullscreenIcon />
-            </button>
-          </div>
-        </div>
-
-        {/* Fast Forward / Rewind Indicator */}
-        <div className="flex justify-center pt-4">
+        {/* Top Area (Formerly Fullscreen Controls - Now Empty or FF Status) */}
+        <div className="flex justify-center pt-8 h-20">
           {longPressActive && ffDirection === "forward" && (
-            <div className="bg-black/60 text-white px-3 py-1 rounded-full text-sm font-bold pointer-events-auto">
+            <div className="bg-black/60 text-white px-3 py-1 rounded-full text-sm font-bold pointer-events-auto h-fit">
               &raquo; {FAST_FORWARD_RATE}x
             </div>
           )}
           {longPressActive && ffDirection === "rewind" && (
-            <div className="bg-black/60 text-white px-3 py-1 rounded-full text-sm font-bold pointer-events-auto">
+            <div className="bg-black/60 text-white px-3 py-1 rounded-full text-sm font-bold pointer-events-auto h-fit">
               &laquo; rewind
             </div>
           )}
@@ -653,7 +448,7 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
               }}
             >
               <svg
-                className="w-12 h-12 text-white"
+                className="w-12 h-12 text-white drop-shadow-md"
                 fill="currentColor"
                 viewBox="0 0 20 20"
               >
@@ -663,73 +458,81 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
           )}
         </div>
 
-        {/* Bottom Controls */}
-        <div className="flex items-end gap-4">
-          <div className="flex-grow pointer-events-auto">
-            <div className="text-white">
-              <h3 className="font-bold text-lg">
-                {video.author.name || "Unknown"}
-              </h3>
-              <div
-                className="mt-1 text-sm max-h-20 overflow-y-auto pr-2"
-                style={{ WebkitOverflowScrolling: "touch" }}
-              >
-                <p className="whitespace-pre-wrap">{video.title}</p>
-              </div>
-            </div>
-
-            {/* Progress Bar */}
-            <div
-              ref={progressRef}
-              role="slider"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={Math.round(progress)}
-              className="w-full h-20 cursor-pointer group pointer-events-auto mt-2"
-              onPointerDown={onProgressDown}
-              onPointerMove={onProgressMove}
-              onPointerUp={onProgressUp}
-              onPointerCancel={() => {
-                seekingRef.current = false;
-              }}
-            >
-              <div className="bg-white/20 w-full h-1 group-hover:h-2 transition-all duration-150 rounded-full overflow-hidden">
+        {/* Bottom Controls Area - Gradient added here */}
+        <div className="w-full bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-12 pb-12 px-4">
+          <div className="flex items-end gap-4">
+            {/* Text Info & Progress */}
+            <div className="flex-grow pointer-events-auto">
+              <div className="text-white">
+                <h3 className="font-bold text-lg drop-shadow-md">
+                  {video.author.name || "Unknown"}
+                </h3>
                 <div
-                  className="bg-white h-full"
-                  style={{ width: `${progress}%` }}
-                />
+                  className="mt-1 text-sm max-h-20 overflow-y-auto pr-2"
+                  style={{ WebkitOverflowScrolling: "touch" }}
+                >
+                  <p className="whitespace-pre-wrap drop-shadow-md">
+                    {video.title}
+                  </p>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div
+                ref={progressRef}
+                role="slider"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(progress)}
+                className="w-full h-12 cursor-pointer group pointer-events-auto mt-2 flex items-center"
+                onPointerDown={onProgressDown}
+                onPointerMove={onProgressMove}
+                onPointerUp={onProgressUp}
+                onPointerCancel={() => {
+                  seekingRef.current = false;
+                }}
+              >
+                <div className="bg-white/30 w-full h-1 group-hover:h-2 transition-all duration-150 rounded-full overflow-hidden backdrop-blur-sm">
+                  <div
+                    className="bg-white h-full shadow-[0_0_10px_rgba(255,255,255,0.7)]"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Right-side controls (Like + Volume) */}
-          <div className="flex flex-col items-center gap-4 pointer-events-auto pr-2 h-40">
-            <button
-              onClick={(e) => likeButton(e)}
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-              }}
-              className="flex flex-col items-center"
-              aria-pressed={isLiked}
-            >
-              <HeartIcon isFilled={isLiked} />
-              <span className="text-white text-sm font-bold">{likeCount}</span>
-            </button>
+            {/* Right-side controls (Like + Volume) - Layout adjusted */}
+            <div className="flex flex-col items-center gap-6 pointer-events-auto pb-2">
+              <button
+                onClick={(e) => likeButton(e)}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                }}
+                className="flex flex-col items-center group"
+                aria-pressed={isLiked}
+              >
+                <div className="transform transition-transform duration-200 group-active:scale-90">
+                  <HeartIcon isFilled={isLiked} />
+                </div>
+                <span className="text-white text-sm font-bold drop-shadow-md">
+                  {likeCount}
+                </span>
+              </button>
 
-            {/* Volume toggle - UI only */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                setIsMuted((s) => !s);
-              }}
-              className="p-2 rounded-md bg-black/40 "
-              aria-pressed={isMuted}
-              aria-label={isMuted ? "Unmute" : "Mute"}
-            >
-              {isMuted ? <VolumeOffIcon /> : <VolumeOnIcon />}
-            </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setIsMuted((s) => !s);
+                }}
+                className="p-2 rounded-full bg-black/20 backdrop-blur-sm active:bg-black/40 transition-colors"
+                aria-pressed={isMuted}
+                aria-label={isMuted ? "Unmute" : "Mute"}
+              >
+                {isMuted ? <VolumeOffIcon /> : <VolumeOnIcon />}
+              </button>
+            </div>
           </div>
         </div>
       </div>
