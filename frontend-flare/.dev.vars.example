@@ -1,2 +1,9 @@
-# Load .env.development* files when running `wrangler dev`
-NEXTJS_ENV=development
+# Cloudflare R2 設定
+CLOUDFLARE_ACCOUNT_ID=あなたのAccountID
+R2_ACCESS_KEY_ID=あなたのAccessKeyID
+R2_SECRET_ACCESS_KEY=あなたのSecretAccessKey
+R2_BUCKET_NAME=あなたのBucketName
+
+# Supabase 設定 (既存の設定があればそのまま)
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...

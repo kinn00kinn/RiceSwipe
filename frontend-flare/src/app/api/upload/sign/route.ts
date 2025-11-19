@@ -78,7 +78,10 @@ export async function POST(request: NextRequest) {
   });
 
   const videoId = crypto.randomUUID();
-  const objectKey = `videos/${user.id}/${videoId}/${filename}`;
+  
+  // [修正] Pythonコードに合わせてパスを変更 (videos/ プレフィックスを削除)
+  // Before: const objectKey = `videos/${user.id}/${videoId}/${filename}`;
+  const objectKey = `${user.id}/${videoId}/${filename}`;
 
   const command = new PutObjectCommand({
     Bucket: process.env.R2_BUCKET_NAME!,
