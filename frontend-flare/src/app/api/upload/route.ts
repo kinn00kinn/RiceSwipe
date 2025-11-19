@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 
 export async function POST(request: Request) {
-  // createServerComponentClient は引数なしで使う実装に合わせる
+  // 1. Supabaseクライアントの初期化と認証チェック
   const supabase = await createServerComponentClient();
 
   const {
@@ -15,49 +15,73 @@ export async function POST(request: Request) {
     error: getUserError,
   } = await supabase.auth.getUser();
 
-  if (getUserError) {
-    console.error("supabase.getUser error:", getUserError);
-    return NextResponse.json({ error: getUserError.message }, { status: 500 });
-  }
-
-  if (!user) {
+  if (getUserError || !user) {
+    console.error("Auth error:", getUserError);
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    // request.json() の戻りは unknown なので安全に扱う
-    const body: unknown = await request.json();
+    // 2. リクエストボディの解析
+    const body = await request.json();
 
-    if (typeof body !== "object" || body === null) {
-      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-    }
+    // 型ガードと入力検証
+    const { filename, contentType, title, description } = body as {
+      filename?: string;
+      contentType?: string;
+      title?: string;
+      description?: string;
+    };
 
-    // 型ガード
-    const filename = (body as Record<string, unknown>).filename;
-    const contentType = (body as Record<string, unknown>).contentType;
-
-    if (typeof filename !== "string" || typeof contentType !== "string") {
+    if (!filename || !contentType) {
       return NextResponse.json(
-        { error: "Missing or invalid filename or contentType" },
+        { error: "Missing filename or contentType" },
         { status: 400 }
       );
     }
 
-    // 2. 他のファイルと重複しないようにユニークなキーを生成
-    const key = `${user.id}/${randomUUID()}-${filename}`;
+    // 3. IDとオブジェクトキーの生成 (Python版のロジックに合わせる)
+    // 形式: {user_id}/{video_id}/{filename}
+    const videoId = randomUUID();
+    const objectKey = `${user.id}/${videoId}/${filename}`;
 
-    const command = new PutObjectCommand({
-      Bucket: R2_BUCKET_NAME,
-      Key: key,
-      ContentType: contentType,
+    // 4. Supabaseへのメタデータ保存 (Python版のロジックを再現)
+    // Note: アップロード前にDBにレコードを作ることで、IDを確定させます
+    const { error: dbError } = await supabase.from("videos").insert({
+      id: videoId,
+      r2_object_key: objectKey,
+      title: title || filename.split(".")[0], // タイトルがない場合はファイル名(拡張子なし)
+      description: description || null,
+      author_id: user.id,
     });
 
-    // 3. R2へのアップロード用署名付きURLを生成 (有効期限60秒)
-    const signedUrl = await getSignedUrl(R2, command, { expiresIn: 60 });
+    if (dbError) {
+      console.error("Supabase Insert Error:", dbError);
+      return NextResponse.json(
+        { error: "Failed to save video metadata" },
+        { status: 500 }
+      );
+    }
 
-    return NextResponse.json({ signedUrl, key });
+    // 5. R2へのアップロード用署名付きURL生成
+    const command = new PutObjectCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: objectKey,
+      ContentType: contentType,
+      // 必要に応じてACLやMetadataを追加
+    });
+
+    // 有効期限は600秒(10分)など、アップロード時間に合わせて調整してください
+    const signedUrl = await getSignedUrl(R2, command, { expiresIn: 600 });
+
+    // 6. クライアントへのレスポンス
+    return NextResponse.json({
+      success: true,
+      signedUrl,
+      key: objectKey,
+      videoId: videoId, // フロントエンドでリダイレクトなどに使用
+    });
   } catch (error) {
-    console.error("Error generating signed URL:", error);
+    console.error("Upload setup error:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }
