@@ -3,6 +3,7 @@
 import { useState } from "react";
 import VideoFeed from "./components/VideoFeed";
 import UploadModal from "./components/UploadModal";
+import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 
 interface PageClientProps {
@@ -63,6 +64,22 @@ const LogOutIcon = () => (
   </svg>
 );
 
+const SearchIcon = () => (
+  <svg
+    className="w-6 h-6 text-white"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+    />
+  </svg>
+);
+
 export default function PageClient({ user }: PageClientProps) {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -75,7 +92,23 @@ export default function PageClient({ user }: PageClientProps) {
   };
 
   return (
-    <div className="relative w-full h-screen bg-black overflow-hidden">
+    <div className="relative w-full h-screen bg-black overflow-hidden font-sans">
+      {/* Top Header Overlay */}
+      <header className="absolute top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-4 bg-gradient-to-b from-black/70 to-transparent pointer-events-none">
+        <div className="flex items-center gap-2 pointer-events-auto">
+          {/* App Logo / Brand */}
+          <img src="./header.jpg" alt="RiceSwipe" className="h-10 center" />
+        </div>
+
+        {/* Search Button */}
+        <Link
+          href="/search"
+          className="pointer-events-auto p-2 rounded-full hover:bg-white/10 transition-colors"
+        >
+          <SearchIcon />
+        </Link>
+      </header>
+
       <main className="w-full h-full">
         <VideoFeed />
       </main>
@@ -89,7 +122,7 @@ export default function PageClient({ user }: PageClientProps) {
       )}
 
       {/* Floating Action Button & Menu */}
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-4">
+      <div className="fixed bottom-12 right-5 z-50 flex flex-col items-end gap-4 pb-safe">
         {/* Menu Items */}
         <div
           className={`flex flex-col items-end gap-3 transition-all duration-200 ${
@@ -120,7 +153,7 @@ export default function PageClient({ user }: PageClientProps) {
             </span>
             <button
               onClick={handleUploadClick}
-              className="w-12 h-12 rounded-full bg-blue-600 text-white hover:bg-blue-500 shadow-lg shadow-blue-900/50 flex items-center justify-center border border-white/10 transition-colors"
+              className="w-12 h-12 rounded-full bg-gradient-to-tr from-blue-600 to-cyan-500 text-white hover:brightness-110 shadow-lg shadow-blue-900/50 flex items-center justify-center border border-white/10 transition-colors"
               title="Upload Video"
             >
               <UploadIcon />
@@ -131,7 +164,7 @@ export default function PageClient({ user }: PageClientProps) {
         {/* Main Toggle Button */}
         <button
           onClick={toggleMenu}
-          className={`w-14 h-14 rounded-full bg-white text-black shadow-xl flex items-center justify-center transition-transform duration-300 z-50 ${
+          className={`w-14 h-14 rounded-full bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.3)] flex items-center justify-center transition-transform duration-300 z-50 ${
             isMenuOpen
               ? "rotate-[135deg] bg-gray-200"
               : "rotate-0 hover:scale-105"

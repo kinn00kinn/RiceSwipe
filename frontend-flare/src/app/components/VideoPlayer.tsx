@@ -7,6 +7,7 @@ type VideoFromApi = VideoType & {
   author: { id: string; name: string | null };
   likeCount: number;
   isLiked: boolean;
+  originalUrl?: string | null; // 追加
 };
 
 interface VideoPlayerProps {
@@ -21,19 +22,20 @@ const DOUBLE_TAP_WINDOW = 300;
 const FAST_FORWARD_RATE = 2.0;
 const REWIND_SPEED_SEC_PER_SEC = 3.0;
 
-// 視認性向上のため drop-shadow-md を追加
+// --- Icons ---
 const HeartIcon = ({ isFilled }: { isFilled: boolean }) => (
   <svg
-    className="w-8 h-8 text-white drop-shadow-md"
-    fill={isFilled ? "currentColor" : "none"}
-    stroke="currentColor"
+    className={`w-8 h-8 drop-shadow-lg transition-colors ${
+      isFilled ? "text-red-500" : "text-white"
+    }`}
+    fill={isFilled ? "currentColor" : "rgba(0,0,0,0.3)"}
+    stroke={isFilled ? "none" : "currentColor"}
+    strokeWidth="2"
     viewBox="0 0 24 24"
-    xmlns="http://www.w3.org/2000/svg"
   >
     <path
       strokeLinecap="round"
       strokeLinejoin="round"
-      strokeWidth="2"
       d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.5l1.318-1.182a4.5 4.5 0 116.364 6.364L12 21l-7.682-7.318a4.5 4.5 0 010-6.364z"
     ></path>
   </svg>
@@ -41,16 +43,17 @@ const HeartIcon = ({ isFilled }: { isFilled: boolean }) => (
 
 const VolumeOnIcon = () => (
   <svg
-    className="w-6 h-6 text-white drop-shadow-md"
+    className="w-7 h-7 text-white drop-shadow-md"
     viewBox="0 0 24 24"
     fill="currentColor"
   >
     <path d="M11 5L6 9H2v6h4l5 4V5zM16.5 12a4.5 4.5 0 00-1.5-3.5v7A4.5 4.5 0 0016.5 12z" />
   </svg>
 );
+
 const VolumeOffIcon = () => (
   <svg
-    className="w-6 h-6 text-white drop-shadow-md"
+    className="w-7 h-7 text-white drop-shadow-md"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -67,6 +70,48 @@ const VolumeOffIcon = () => (
       strokeLinejoin="round"
       d="M19 5L5 19"
     />
+  </svg>
+);
+
+const ShareIcon = () => (
+  <svg
+    className="w-7 h-7 text-white drop-shadow-md"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+    />
+  </svg>
+);
+
+const LinkIcon = () => (
+  <svg
+    className="w-7 h-7 text-white drop-shadow-md"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+    />
+  </svg>
+);
+
+const RewindIcon = () => (
+  <svg
+    className="w-10 h-10 text-white animate-pulse drop-shadow-lg"
+    fill="currentColor"
+    viewBox="0 0 24 24"
+  >
+    <path d="M11 19V5l-9 7 9 7zm11 0V5l-9 7 9 7z" />
   </svg>
 );
 
@@ -111,7 +156,13 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     );
   }
   const videoUrl = `${R2_PUBLIC_DOMAIN}/${video.r2ObjectKey}`;
-
+  const getValidUrl = (url: string) => {
+    if (!url) return "";
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+      return url;
+    }
+    return `https://${url}`;
+  };
   // autoplay when active
   useEffect(() => {
     const el = videoRef.current;
@@ -147,14 +198,12 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     };
   }, []);
 
-  // keep video muted state in sync
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
     el.muted = isMuted;
   }, [isMuted]);
 
-  // helpers
   const clearLongPress = () => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
@@ -191,7 +240,33 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     }
   };
 
-  // rewind rAF
+  // --- Share & Link Handlers ---
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: video.title,
+          text:
+            video.description || `Check out this video by ${video.author.name}`,
+          url: window.location.href, // Or specific video deep link
+        });
+      } catch (err) {
+        console.log("Share canceled or failed", err);
+      }
+    } else {
+      // Fallback for desktop or unsupported browsers: Copy to clipboard
+      navigator.clipboard.writeText(window.location.href);
+      alert("Link copied to clipboard!");
+    }
+  };
+
+  const handleOpenLink = () => {
+    if (video.originalUrl) {
+      window.open(video.originalUrl, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  // --- Rewind Logic ---
   const startRewind = () => {
     stopRewind();
     rewindLastRef.current = performance.now();
@@ -204,14 +279,26 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
       const last = rewindLastRef.current ?? t;
       const dt = (t - last) / 1000;
       rewindLastRef.current = t;
-      el.currentTime = Math.max(
+
+      // Decrement time safely
+      const newTime = Math.max(
         0,
         el.currentTime - REWIND_SPEED_SEC_PER_SEC * dt
       );
-      rewindRafRef.current = requestAnimationFrame(loop);
+      el.currentTime = newTime;
+
+      // Loop if not at start
+      if (newTime > 0) {
+        rewindRafRef.current = requestAnimationFrame(loop);
+      } else {
+        stopRewind();
+        el.play().catch(() => {}); // Resume play at start? Or just pause.
+        setFfDirection(null); // Auto exit rewind at start
+      }
     };
     rewindRafRef.current = requestAnimationFrame(loop);
   };
+
   const stopRewind = () => {
     if (rewindRafRef.current) {
       cancelAnimationFrame(rewindRafRef.current);
@@ -220,7 +307,7 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     rewindLastRef.current = null;
   };
 
-  // long press start
+  // Gestures
   const startLongPressTimer = (pointerId?: number, target?: Element) => {
     clearLongPress();
     longPressTimerRef.current = window.setTimeout(() => {
@@ -238,7 +325,6 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
 
   const onPointerDown = (e: React.PointerEvent) => {
     startRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
-
     const now = Date.now();
     if (
       lastTapTimeRef.current &&
@@ -259,9 +345,7 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     }
     lastTapTimeRef.current = now;
     lastTapPosRef.current = { x: e.clientX, y: e.clientY };
-
     startLongPressTimer(e.pointerId, e.currentTarget as Element);
-
     clearSingleTap();
     singleTapTimerRef.current = window.setTimeout(() => {
       singleTapTimerRef.current = null;
@@ -299,10 +383,7 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
         e.preventDefault();
       }
     }
-
-    if (seekingRef.current) {
-      e.preventDefault();
-    }
+    if (seekingRef.current) e.preventDefault();
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
@@ -313,31 +394,28 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
         (e.currentTarget as Element).releasePointerCapture?.(id);
       } catch {}
     }
-
     if (longPressActive) {
       setLongPressActive(false);
-      if (ffDirection === "forward") {
-        if (videoRef.current) videoRef.current.playbackRate = 1.0;
-      } else if (ffDirection === "rewind") {
-        stopRewind();
-        if (videoRef.current) videoRef.current.playbackRate = 1.0;
+      // Reset everything
+      if (videoRef.current) videoRef.current.playbackRate = 1.0;
+      stopRewind();
+      if (ffDirection === "rewind") {
+        if (videoRef.current && !videoRef.current.paused)
+          videoRef.current.play().catch(() => {});
       }
       setFfDirection(null);
       startRef.current = null;
       return;
     }
-
     if (seekingRef.current) {
       seekingRef.current = false;
       startRef.current = null;
       return;
     }
-
     const s = startRef.current;
     const dx = s ? Math.abs(e.clientX - s.x) : 0;
     const dy = s ? Math.abs(e.clientY - s.y) : 0;
     startRef.current = null;
-
     if (dx <= MOVE_THRESHOLD && dy <= MOVE_THRESHOLD) {
       togglePlay();
     }
@@ -374,14 +452,6 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
     (e.target as Element).releasePointerCapture?.(e.pointerId);
   };
 
-  const likeButton = (e?: React.SyntheticEvent) => {
-    if (e) {
-      e.stopPropagation();
-      e.preventDefault();
-    }
-    doLike();
-  };
-
   return (
     <div
       ref={containerRef}
@@ -389,7 +459,7 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
       className="relative w-full h-screen snap-start bg-black select-none overflow-hidden"
     >
       {/* Video wrapper */}
-      <div className="flex items-center justify-center h-full">
+      <div className="flex items-center justify-center h-full bg-black">
         <video
           ref={videoRef}
           src={videoUrl}
@@ -418,117 +488,162 @@ export default function VideoPlayer({ video, isActive }: VideoPlayerProps) {
         style={{ touchAction: "pan-y" }}
       />
 
+      {/* Playback Speed Overlay */}
+      {(longPressActive || ffDirection) && (
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center animate-in fade-in zoom-in duration-200">
+          <div className="bg-black/60 backdrop-blur-md text-white px-4 py-2 rounded-full text-sm font-bold shadow-xl flex items-center gap-2">
+            {ffDirection === "rewind" ? (
+              <>
+                <RewindIcon />
+                <span>Rewind</span>
+              </>
+            ) : (
+              <>
+                <span>{FAST_FORWARD_RATE}x Speed</span>
+                <svg
+                  className="w-5 h-5"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M4 6l8 6-8 6V6zm9 0l8 6-8 6V6z" />
+                </svg>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Play Button Overlay (Center) */}
+      <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+        {!isPlaying && !longPressActive && (
+          <div
+            className="p-4 rounded-full bg-black/40 backdrop-blur-sm text-white/80 pointer-events-auto transform transition-transform active:scale-95"
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePlay();
+            }}
+          >
+            <svg
+              className="w-16 h-16 drop-shadow-md"
+              fill="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </div>
+        )}
+      </div>
+
       {/* UI Overlay Layer */}
       <div
-        className="absolute inset-0 flex flex-col justify-between pointer-events-none z-20 ui-overlay"
+        className="absolute inset-0 flex flex-col justify-end pointer-events-none z-20 ui-overlay"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        {/* Top Area (Formerly Fullscreen Controls - Now Empty or FF Status) */}
-        <div className="flex justify-center pt-8 h-20">
-          {longPressActive && ffDirection === "forward" && (
-            <div className="bg-black/60 text-white px-3 py-1 rounded-full text-sm font-bold pointer-events-auto h-fit">
-              &raquo; {FAST_FORWARD_RATE}x
-            </div>
-          )}
-          {longPressActive && ffDirection === "rewind" && (
-            <div className="bg-black/60 text-white px-3 py-1 rounded-full text-sm font-bold pointer-events-auto h-fit">
-              &laquo; rewind
-            </div>
-          )}
-        </div>
-
-        {/* Play/Pause Icon (Center) */}
-        <div className="flex-grow flex items-center justify-center">
-          {!isPlaying && !longPressActive && (
-            <div
-              className="p-4 rounded-full bg-black/50 pointer-events-auto"
-              onClick={(e) => {
-                e.stopPropagation();
-                togglePlay();
-              }}
-            >
-              <svg
-                className="w-12 h-12 text-white drop-shadow-md"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
-              </svg>
-            </div>
-          )}
-        </div>
-
-        {/* Bottom Controls Area - Gradient added here */}
-        <div className="w-full bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-12 pb-12 px-4">
+        {/* Gradient Background for Text/Controls */}
+        <div className="w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-24 pb-4 px-4">
           <div className="flex items-end gap-4">
-            {/* Text Info & Progress */}
-            <div className="flex-grow pointer-events-auto">
-              <div className="text-white">
-                <h3 className="font-bold text-lg drop-shadow-md">
-                  {video.author.name || "Unknown"}
+            {/* Left Side: Info & Progress */}
+            <div className="flex-grow pointer-events-auto pb-2 h-40">
+              <div className="text-white mb-3">
+                <h3 className="font-bold text-lg drop-shadow-md flex items-center gap-2">
+                  @{video.author.name || "User"}
                 </h3>
-                <div
-                  className="mt-1 text-sm max-h-20 overflow-y-auto pr-2"
-                  style={{ WebkitOverflowScrolling: "touch" }}
-                >
-                  <p className="whitespace-pre-wrap drop-shadow-md">
-                    {video.title}
+                <p className="text-sm text-gray-200 mt-1 line-clamp-2 drop-shadow-md">
+                  {video.title}
+                </p>
+                {video.description && (
+                  <p className="text-xs text-gray-300 mt-1 line-clamp-1 opacity-80">
+                    {video.description}
                   </p>
-                </div>
+                )}
               </div>
 
               {/* Progress Bar */}
               <div
                 ref={progressRef}
-                role="slider"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={Math.round(progress)}
-                className="w-full h-12 cursor-pointer group pointer-events-auto mt-2 flex items-center"
+                className="w-full h-6 cursor-pointer group flex items-center touch-none"
                 onPointerDown={onProgressDown}
                 onPointerMove={onProgressMove}
                 onPointerUp={onProgressUp}
-                onPointerCancel={() => {
-                  seekingRef.current = false;
-                }}
               >
-                <div className="bg-white/30 w-full h-1 group-hover:h-2 transition-all duration-150 rounded-full overflow-hidden backdrop-blur-sm">
+                <div className="bg-white/30 w-full h-1 group-hover:h-1.5 transition-all duration-200 rounded-full overflow-hidden backdrop-blur-sm">
                   <div
-                    className="bg-white h-full shadow-[0_0_10px_rgba(255,255,255,0.7)]"
+                    className="bg-white h-full shadow-[0_0_8px_rgba(255,255,255,0.8)] relative"
                     style={{ width: `${progress}%` }}
-                  />
+                  >
+                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 bg-white rounded-full shadow-md scale-0 group-hover:scale-150 transition-transform" />
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Right-side controls (Like + Volume) - Layout adjusted */}
-            <div className="flex flex-col items-center gap-6 pointer-events-auto pb-2">
+            {/* Right Side: Actions (Like, Share, Link, Volume) */}
+            {/* Added pb-16 to avoid collision with Floating Upload Button (bottom-6 right-6) */}
+            <div className="flex flex-col items-center gap-5 pointer-events-auto pb-24 min-w-[50px]">
+              {/* Author Avatar (Placeholder) */}
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-700 to-gray-600 border border-white/20 mb-2 relative">
+                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-red-500 rounded-full w-4 h-4 flex items-center justify-center border border-black">
+                  <span className="text-white text-[10px] font-bold">+</span>
+                </div>
+              </div>
+
+              {/* Like */}
               <button
-                onClick={(e) => likeButton(e)}
-                onPointerDown={(e) => {
+                onClick={(e) => {
                   e.stopPropagation();
-                  e.preventDefault();
+                  doLike();
                 }}
-                className="flex flex-col items-center group"
-                aria-pressed={isLiked}
+                className="flex flex-col items-center group gap-1"
               >
-                <div className="transform transition-transform duration-200 group-active:scale-90">
+                <div className="transform transition-transform duration-200 active:scale-75 group-hover:scale-110">
                   <HeartIcon isFilled={isLiked} />
                 </div>
-                <span className="text-white text-sm font-bold drop-shadow-md">
+                <span className="text-white text-xs font-bold drop-shadow-md">
                   {likeCount}
                 </span>
               </button>
 
+              {/* Link (External) */}
+              {video.originalUrl && (
+                <a
+                  href={getValidUrl(video.originalUrl)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex flex-col items-center group gap-1"
+                >
+                  <div className="p-2 rounded-full bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-colors active:scale-90">
+                    <LinkIcon />
+                  </div>
+                  <span className="text-white text-xs font-medium drop-shadow-md">
+                    Link
+                  </span>
+                </a>
+              )}
+
+              {/* Share */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  e.preventDefault();
+                  handleShare();
+                }}
+                className="flex flex-col items-center group gap-1"
+              >
+                <div className="transform transition-transform duration-200 active:scale-90 group-hover:rotate-12">
+                  <ShareIcon />
+                </div>
+                <span className="text-white text-xs font-medium drop-shadow-md">
+                  Share
+                </span>
+              </button>
+
+              {/* Volume (Toggle) */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
                   setIsMuted((s) => !s);
                 }}
-                className="p-2 rounded-full bg-black/20 backdrop-blur-sm active:bg-black/40 transition-colors"
-                aria-pressed={isMuted}
-                aria-label={isMuted ? "Unmute" : "Mute"}
+                className="p-2 rounded-full hover:bg-black/20 transition-colors mt-2 active:scale-90"
               >
                 {isMuted ? <VolumeOffIcon /> : <VolumeOnIcon />}
               </button>
