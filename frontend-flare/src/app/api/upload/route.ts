@@ -1,10 +1,8 @@
-// src/app/api/upload/route.ts
-import { PutObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { R2, R2_BUCKET_NAME } from "@/lib/r2";
 import { createServerComponentClient } from "@/lib/supabase/utils";
 import { NextResponse } from "next/server";
-import { randomUUID } from "crypto";
+
+// Cloudflare Workersで動作させるために必須
+export const runtime = "edge";
 
 export async function POST(request: Request) {
   // 1. Supabaseクライアントの初期化と認証チェック
@@ -25,11 +23,12 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     // 型ガードと入力検証
-    const { filename, contentType, title, description } = body as {
+    const { filename, contentType, title, description, originalUrl } = body as {
       filename?: string;
       contentType?: string;
       title?: string;
       description?: string;
+      originalUrl?: string;
     };
 
     if (!filename || !contentType) {
@@ -39,19 +38,19 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. IDとオブジェクトキーの生成 (Python版のロジックに合わせる)
-    // 形式: {user_id}/{video_id}/{filename}
-    const videoId = randomUUID();
+    // 3. IDとオブジェクトキーの生成
+    // Edge環境対応のためグローバルの crypto.randomUUID() を使用
+    const videoId = crypto.randomUUID();
     const objectKey = `${user.id}/${videoId}/${filename}`;
 
-    // 4. Supabaseへのメタデータ保存 (Python版のロジックを再現)
-    // Note: アップロード前にDBにレコードを作ることで、IDを確定させます
+    // 4. Supabaseへのメタデータ保存
     const { error: dbError } = await supabase.from("videos").insert({
       id: videoId,
       r2_object_key: objectKey,
-      title: title || filename.split(".")[0], // タイトルがない場合はファイル名(拡張子なし)
+      title: title || filename.split(".")[0],
       description: description || null,
       author_id: user.id,
+      original_url: originalUrl || null, // originalUrlを保存
     });
 
     if (dbError) {
@@ -62,24 +61,45 @@ export async function POST(request: Request) {
       );
     }
 
-    // 5. R2へのアップロード用署名付きURL生成
-    const command = new PutObjectCommand({
-      Bucket: R2_BUCKET_NAME,
-      Key: objectKey,
-      ContentType: contentType,
-      // 必要に応じてACLやMetadataを追加
+    // 5. 【修正】backend-signer に署名を依頼
+    // AWS SDKを直接使わず、外部の署名用ワーカーを呼び出す
+    const signerUrl = process.env.SIGNER_WORKER_URL; 
+    const internalKey = process.env.INTERNAL_API_KEY;
+
+    if (!signerUrl || !internalKey) {
+        console.error("Server Config Error: Missing signer vars");
+        return NextResponse.json({ error: "Server Config Error" }, { status: 500 });
+    }
+
+    const signerRes = await fetch(signerUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Key": internalKey,
+      },
+      body: JSON.stringify({ 
+        objectKey, 
+        contentType,
+        originalUrl // R2メタデータ用にも渡す
+      }),
     });
 
-    // 有効期限は600秒(10分)など、アップロード時間に合わせて調整してください
-    const signedUrl = await getSignedUrl(R2, command, { expiresIn: 600 });
+    if (!signerRes.ok) {
+      const errText = await signerRes.text();
+      console.error("Signer Error:", errText);
+      throw new Error("Failed to get signed URL");
+    }
+
+    const { uploadUrl } = await signerRes.json() as { uploadUrl: string };
 
     // 6. クライアントへのレスポンス
     return NextResponse.json({
       success: true,
-      signedUrl,
+      signedUrl: uploadUrl, // 変数名を合わせて返す
       key: objectKey,
-      videoId: videoId, // フロントエンドでリダイレクトなどに使用
+      videoId: videoId,
     });
+
   } catch (error) {
     console.error("Upload setup error:", error);
     return NextResponse.json(
