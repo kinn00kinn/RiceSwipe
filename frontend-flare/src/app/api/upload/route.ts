@@ -2,7 +2,7 @@ import { createServerComponentClient } from "@/lib/supabase/utils";
 import { NextResponse } from "next/server";
 
 // Cloudflare Workersで動作させるために必須
-export const runtime = "edge";
+// export const runtime = "edge";
 
 export async function POST(request: Request) {
   // 1. Supabaseクライアントの初期化と認証チェック
