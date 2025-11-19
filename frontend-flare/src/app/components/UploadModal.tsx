@@ -19,6 +19,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [originalUrl, setOriginalUrl] = useState(""); // ★追加
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [status, setStatus] = useState<
@@ -28,7 +29,14 @@ export default function UploadModal({ onClose }: UploadModalProps) {
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      setFile(selectedFile);
+      
+      // UX向上: タイトル自動入力
+      if (!title) {
+        const nameWithoutExt = selectedFile.name.replace(/\.[^/.]+$/, "");
+        setTitle(nameWithoutExt);
+      }
     }
   };
 
@@ -37,9 +45,16 @@ export default function UploadModal({ onClose }: UploadModalProps) {
     e.stopPropagation();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setFile(e.dataTransfer.files[0]);
+      const selectedFile = e.dataTransfer.files[0];
+      setFile(selectedFile);
+      
+      // UX向上: タイトル自動入力 (ドラッグ＆ドロップ時も)
+      if (!title) { // title stateにアクセスできないため、set関数内でチェック等はできないが、ここは簡易的に実施
+         const nameWithoutExt = selectedFile.name.replace(/\.[^/.]+$/, "");
+         setTitle(prev => prev || nameWithoutExt);
+      }
     }
-  }, []);
+  }, [title]); // titleを依存配列に入れる
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -98,8 +113,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
         const xhr = new XMLHttpRequest();
         xhr.open("PUT", uploadUrl);
 
-        // [修正点] 重要: Content-Typeを明示的に設定する
-        // これを設定しないと、署名付きURLの要件と一致せずアップロードが拒否される可能性があります
+        // 重要: Content-Typeを設定
         xhr.setRequestHeader("Content-Type", file.type);
 
         xhr.upload.onprogress = (event) => {
@@ -129,6 +143,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
           objectKey,
           title,
           description,
+          originalUrl, // ★追加: フォームの値を送信
         }),
       });
 
@@ -139,8 +154,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
       setStatus("success");
       setTimeout(() => {
         onClose();
-        // 必要であればここでフィードのリロードなどをトリガー
-        window.location.reload(); // 簡易的なリロード
+        window.location.reload();
       }, 1500);
     } catch (error) {
       setStatus("error");
@@ -156,8 +170,8 @@ export default function UploadModal({ onClose }: UploadModalProps) {
       {/* Overlay to close on click */}
       <div className="absolute inset-0" onClick={onClose} />
 
-      {/* Modal Content */}
-      <div className="relative w-full max-w-lg bg-gray-900 rounded-t-2xl sm:rounded-2xl border-t sm:border border-white/10 shadow-2xl overflow-hidden flex flex-col max-h-[90dvh]">
+      {/* Modal Content - デザインをダークテーマに統一 */}
+      <div className="relative w-full max-w-lg bg-gray-900 rounded-t-2xl sm:rounded-2xl border-t sm:border border-gray-800 shadow-2xl overflow-hidden flex flex-col max-h-[90dvh]">
         {/* Mobile Handle Bar */}
         <div className="w-full flex justify-center pt-3 pb-1 sm:hidden pointer-events-none">
           <div className="w-12 h-1.5 bg-gray-700 rounded-full" />
@@ -168,7 +182,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
             <h2 className="text-xl font-bold text-white">Upload Video</h2>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-white transition-colors p-2"
+              className="text-gray-400 hover:text-white transition-colors p-2 rounded-full hover:bg-gray-800"
             >
               ✕
             </button>
@@ -181,9 +195,9 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                 <p className="text-lg font-medium text-white mb-2">
                   Uploading...
                 </p>
-                <div className="w-full bg-gray-800 rounded-full h-4 overflow-hidden">
+                <div className="w-full bg-gray-800 rounded-full h-4 overflow-hidden border border-gray-700">
                   <div
-                    className="bg-blue-500 h-full transition-all duration-300 ease-out"
+                    className="bg-gradient-to-r from-blue-600 to-blue-400 h-full transition-all duration-300 ease-out"
                     style={{ width: `${uploadProgress}%` }}
                   />
                 </div>
@@ -194,7 +208,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
             </div>
           ) : status === "success" ? (
             <div className="py-10 text-center space-y-4">
-              <div className="w-16 h-16 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mx-auto">
+              <div className="w-16 h-16 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mx-auto border border-green-500/30">
                 <svg
                   className="w-8 h-8"
                   fill="none"
@@ -214,17 +228,21 @@ export default function UploadModal({ onClose }: UploadModalProps) {
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
               {status === "error" && (
-                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
-                  {errorMessage}
+                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm flex items-start gap-3">
+                   <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>{errorMessage}</span>
                 </div>
               )}
 
+              {/* Drag & Drop Area */}
               <div
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
                 onDragEnter={handleDragEnter}
                 onDragLeave={handleDragLeave}
-                className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all
+                className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200
                   ${
                     isDragging
                       ? "border-blue-500 bg-blue-500/10"
@@ -262,9 +280,9 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                       </span>
                     </div>
                   ) : (
-                    <div className="text-gray-400">
-                      <p className="text-2xl mb-2">☁️</p>
-                      <p className="font-medium">Tap to select video</p>
+                    <div className="text-gray-400 group">
+                      <p className="text-3xl mb-3 group-hover:scale-110 transition-transform duration-200">☁️</p>
+                      <p className="font-medium text-gray-300">Tap to select video</p>
                       <p className="text-sm text-gray-500 mt-1">
                         or drag and drop
                       </p>
@@ -274,10 +292,11 @@ export default function UploadModal({ onClose }: UploadModalProps) {
               </div>
 
               <div className="space-y-4">
+                {/* Title */}
                 <div>
                   <label
                     htmlFor="title"
-                    className="block text-sm font-medium text-gray-400 mb-1.5"
+                    className="block text-sm font-medium text-gray-300 mb-1.5"
                   >
                     Title
                   </label>
@@ -286,16 +305,17 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                     type="text"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                     placeholder="Enter video title"
                     required
                   />
                 </div>
 
+                {/* Description */}
                 <div>
                   <label
                     htmlFor="description"
-                    className="block text-sm font-medium text-gray-400 mb-1.5"
+                    className="block text-sm font-medium text-gray-300 mb-1.5"
                   >
                     Description
                   </label>
@@ -303,26 +323,44 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                     id="description"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all resize-none"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all resize-none"
                     rows={3}
                     placeholder="What's this video about?"
                   />
                 </div>
+
+                {/* ★追加: Original URL */}
+                <div>
+                  <label
+                    htmlFor="originalUrl"
+                    className="block text-sm font-medium text-gray-300 mb-1.5"
+                  >
+                    Original URL <span className="text-gray-500 text-xs ml-1">(Optional)</span>
+                  </label>
+                  <input
+                    id="originalUrl"
+                    type="url"
+                    value={originalUrl}
+                    onChange={(e) => setOriginalUrl(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                    placeholder="https://..."
+                  />
+                </div>
               </div>
 
-              <div className="pt-2 flex gap-3">
+              <div className="pt-4 flex gap-3">
                 <Button
                   type="button"
                   variant="ghost"
                   onClick={onClose}
-                  className="flex-1 text-gray-400 hover:text-white hover:bg-gray-800"
+                  className="flex-1 text-gray-400 hover:text-white hover:bg-gray-800 py-3"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
                   disabled={!file || !title}
-                  className="flex-[2] bg-blue-600 hover:bg-blue-500 text-white font-medium py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-[2] bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold py-3 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
                 >
                   Upload Video
                 </Button>
