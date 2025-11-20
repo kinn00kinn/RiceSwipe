@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -37,7 +37,8 @@ const SearchIcon = () => (
   </svg>
 );
 
-export default function SearchPage() {
+// ロジック部分を別コンポーネントに切り出し
+function SearchContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q") || "";
@@ -56,7 +57,6 @@ export default function SearchPage() {
       const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
       if (res.ok) {
         const data = await res.json();
-        // ここで型アサーションを追加しました
         setResults(data as any[]);
       }
     } catch (err) {
@@ -66,7 +66,6 @@ export default function SearchPage() {
     }
   };
 
-  // Debounce search or search on submit
   useEffect(() => {
     const timer = setTimeout(() => {
       if (query) doSearch(query);
@@ -109,11 +108,10 @@ export default function SearchPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {results.map((video) => (
               <Link
-                href={`/?videoId=${video.id}`} // Note: Main feed needs to support jumping to video, or just link to standalone page
+                href={`/?videoId=${video.id}`}
                 key={video.id}
                 className="relative aspect-[9/16] bg-gray-900 rounded-lg overflow-hidden group"
               >
-                {/* Assuming we don't have thumbnails generated yet, we use a video tag paused at 0s or a placeholder */}
                 <div className="absolute inset-0 flex items-center justify-center bg-gray-800">
                   <span className="text-xs text-gray-500">Video</span>
                 </div>
@@ -138,5 +136,20 @@ export default function SearchPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// メインコンポーネントでSuspenseを使ってラップする
+export default function SearchPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-black text-white flex items-center justify-center">
+          Loading...
+        </div>
+      }
+    >
+      <SearchContent />
+    </Suspense>
   );
 }

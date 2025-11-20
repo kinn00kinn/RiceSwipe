@@ -1,10 +1,14 @@
+"use client";
+
 import { createServerComponentClient } from "@/lib/supabase/utils";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Button } from "../components/ui/Button";
+import { useState } from "react";
+import { Turnstile } from "@marsidev/react-turnstile";
 
 type LoginPageProps = {
-  searchParams?: Promise<{ message?: string }>;
+  searchParams?: { message?: string };
 };
 
 const GoogleIcon = () => (
@@ -28,30 +32,31 @@ const GoogleIcon = () => (
   </svg>
 );
 
-export default async function Login({ searchParams }: LoginPageProps) {
-  const resolvedSearchParams = await searchParams;
-  const message = resolvedSearchParams?.message;
+// Server Action for Google Sign-In
+const signInWithGoogle = async () => {
+  "use server";
 
-  const signInWithGoogle = async () => {
-    "use server";
+  const origin = (await headers()).get("origin");
+  const supabase = await createServerComponentClient();
 
-    const origin = (await headers()).get("origin");
-    const supabase = await createServerComponentClient();
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${origin}/auth/callback`,
+    },
+  });
 
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${origin}/auth/callback`,
-      },
-    });
+  if (error) {
+    console.error(error);
+    return redirect("/login?message=Could not authenticate with Google");
+  }
 
-    if (error) {
-      console.error(error);
-      return redirect("/login?message=Could not authenticate with Google");
-    }
+  return redirect(data.url);
+};
 
-    return redirect(data.url);
-  };
+export default function Login({ searchParams }: LoginPageProps) {
+  const [token, setToken] = useState<string | null>(null);
+  const message = searchParams?.message;
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-[#0a0a0a] relative overflow-hidden">
@@ -72,15 +77,27 @@ export default async function Login({ searchParams }: LoginPageProps) {
           </p>
         </div>
 
-        <form action={signInWithGoogle} className="space-y-4">
+        <form action={signInWithGoogle} className="space-y-6">
           <Button
             variant="default"
             size="lg"
-            className="w-full h-12 bg-white hover:bg-gray-100 text-gray-900 font-medium border border-gray-200 transition-all hover:shadow-lg hover:scale-[1.02]"
+            className="w-full h-12 bg-white hover:bg-gray-100 text-gray-900 font-medium border border-gray-200 transition-all hover:shadow-lg hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+            disabled={!token}
           >
             <GoogleIcon />
             Continue with Google
           </Button>
+
+          <Turnstile
+            siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
+            onSuccess={setToken}
+            onExpire={() => setToken(null)}
+            onError={() => setToken(null)}
+            options={{
+              theme: "dark",
+            }}
+            className="mx-auto"
+          />
         </form>
 
         {message && (
