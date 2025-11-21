@@ -27,21 +27,47 @@ const GoogleIcon = () => (
 );
 
 export function LoginForm() {
+  // R18同意のチェック状態管理
+  const [isAgreed, setIsAgreed] = useState(false);
+
+  // [修正] Turnstile用のStateのコメントアウトを解除
   const [token, setToken] = useState<string | null>(null);
 
   return (
     <form action={signInWithGoogle} className="space-y-6">
+      {/* R18 同意チェックボックス */}
+      <div className="flex items-start space-x-3 p-1">
+        <div className="flex items-center h-5">
+          <input
+            id="r18-consent"
+            type="checkbox"
+            checked={isAgreed}
+            onChange={(e) => setIsAgreed(e.target.checked)}
+            className="w-4 h-4 border-gray-600 rounded bg-gray-700 text-blue-600 focus:ring-blue-500 ring-offset-gray-800"
+          />
+        </div>
+        <div className="ml-1 text-sm">
+          <label
+            htmlFor="r18-consent"
+            className="font-medium text-gray-300 cursor-pointer select-none"
+          >
+            私は18歳以上であり、成人向けコンテンツが含まれることに同意します。
+          </label>
+        </div>
+      </div>
+
       <Button
         variant="default"
         size="lg"
         className="w-full h-12 bg-white hover:bg-gray-100 text-gray-900 font-medium border border-gray-200 transition-all hover:shadow-lg hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
-        // disabled={!token}
+        // [修正] R18同意がない、またはTurnstileトークンがない場合は無効化
+        disabled={!isAgreed || !token}
       >
         <GoogleIcon />
-        Continue with Google
+        Googleでログイン
       </Button>
 
-      {/* <Turnstile
+      <Turnstile
         siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
         onSuccess={setToken}
         onExpire={() => setToken(null)}
@@ -50,7 +76,7 @@ export function LoginForm() {
           theme: "dark",
         }}
         className="mx-auto"
-      /> */}
+      />
     </form>
   );
 }
