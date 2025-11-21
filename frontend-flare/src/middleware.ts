@@ -2,6 +2,17 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createMiddlewareClient } from "./lib/supabase/utils";
 
 export async function middleware(request: NextRequest) {
+  // --- [追加] 日本国外からのアクセス制限 ---
+  // Cloudflareのヘッダー、またはNext.jsのgeoオブジェクトから国コードを取得
+  const country = request.headers.get("CF-IPCountry") || request.geo?.country;
+
+  // 国コードが取得でき、かつ 'JP' (日本) でない場合は403エラーを返す
+  // ※ ローカル環境(localhost)など国コードが取得できない場合はアクセスを許可します
+  if (country && country !== 'JP') {
+    return new NextResponse("Access denied: This service is only available in Japan.", { status: 403 });
+  }
+  // --------------------------------------
+
   const { supabase, response } = createMiddlewareClient(request);
 
   // [変更点] getSession() を getUser() に変更
