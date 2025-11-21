@@ -2,7 +2,7 @@
 
 import { useState, useCallback, ChangeEvent } from "react";
 import { Button } from "./ui/Button";
-import { z } from 'zod'; // Added Zod import
+import { z } from "zod";
 
 // Define Zod schema for the sign API response
 const SignApiResponseSchema = z.object({
@@ -19,14 +19,24 @@ export default function UploadModal({ onClose }: UploadModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [originalUrl, setOriginalUrl] = useState(""); // ★追加
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [status, setStatus] = useState<"idle" | "uploading" | "success" | "error">("idle");
+  const [status, setStatus] = useState<
+    "idle" | "uploading" | "success" | "error"
+  >("idle");
   const [errorMessage, setErrorMessage] = useState("");
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      setFile(selectedFile);
+      
+      // UX向上: タイトル自動入力
+      if (!title) {
+        const nameWithoutExt = selectedFile.name.replace(/\.[^/.]+$/, "");
+        setTitle(nameWithoutExt);
+      }
     }
   };
 
@@ -35,9 +45,16 @@ export default function UploadModal({ onClose }: UploadModalProps) {
     e.stopPropagation();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setFile(e.dataTransfer.files[0]);
+      const selectedFile = e.dataTransfer.files[0];
+      setFile(selectedFile);
+      
+      // UX向上: タイトル自動入力 (ドラッグ＆ドロップ時も)
+      if (!title) { // title stateにアクセスできないため、set関数内でチェック等はできないが、ここは簡易的に実施
+         const nameWithoutExt = selectedFile.name.replace(/\.[^/.]+$/, "");
+         setTitle(prev => prev || nameWithoutExt);
+      }
     }
-  }, []);
+  }, [title]); // titleを依存配列に入れる
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -66,7 +83,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
     setErrorMessage("");
 
     try {
-      // 1. Get presigned URL from our API
+      // 1. Get presigned URL
       const signResponse = await fetch("/api/upload/sign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -84,15 +101,21 @@ export default function UploadModal({ onClose }: UploadModalProps) {
       const validationResult = SignApiResponseSchema.safeParse(signApiData);
 
       if (!validationResult.success) {
-        throw new Error(`Invalid sign API response: ${validationResult.error.message}`);
+        throw new Error(
+          `Invalid sign API response: ${validationResult.error.message}`
+        );
       }
 
       const { uploadUrl, videoId, objectKey } = validationResult.data;
 
-      // 2. Upload file to R2 using XMLHttpRequest to track progress
+      // 2. Upload to R2
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open("PUT", uploadUrl);
+
+        // 重要: Content-Typeを設定
+        xhr.setRequestHeader("Content-Type", file.type);
+
         xhr.upload.onprogress = (event) => {
           if (event.lengthComputable) {
             const percentComplete = (event.loaded / event.total) * 100;
@@ -106,11 +129,12 @@ export default function UploadModal({ onClose }: UploadModalProps) {
             reject(new Error(`Upload failed: ${xhr.statusText}`));
           }
         };
-        xhr.onerror = () => reject(new Error("Upload failed due to network error."));
+        xhr.onerror = () =>
+          reject(new Error("Upload failed due to network error."));
         xhr.send(file);
       });
 
-      // 3. Save video metadata to our database
+      // 3. Save metadata
       const metaResponse = await fetch("/api/videos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -119,6 +143,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
           objectKey,
           title,
           description,
+          originalUrl, // ★追加: フォームの値を送信
         }),
       });
 
@@ -127,116 +152,222 @@ export default function UploadModal({ onClose }: UploadModalProps) {
       }
 
       setStatus("success");
-      // Optionally, close modal after a short delay
       setTimeout(() => {
         onClose();
-        // Here you might want to trigger a re-fetch of the video feed
-      }, 2000);
-
+        window.location.reload();
+      }, 1500);
     } catch (error) {
       setStatus("error");
-      setErrorMessage(error instanceof Error ? error.message : "An unknown error occurred.");
+      setErrorMessage(
+        error instanceof Error ? error.message : "An unknown error occurred."
+      );
       console.error(error);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-      <div className="relative bg-gray-900 rounded-lg w-full max-w-lg p-6 text-white">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="absolute top-2 right-2"
-          onClick={onClose}
-          aria-label="Close"
-        >
-          ✕
-        </Button>
-        <h2 className="text-xl font-bold mb-4">Upload Video</h2>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200">
+      {/* Overlay to close on click */}
+      <div className="absolute inset-0" onClick={onClose} />
 
-        {status === "uploading" && (
-          <div className="text-center">
-            <p>Uploading...</p>
-            <div className="w-full bg-gray-700 rounded-full h-2.5 mt-2">
-              <div
-                className="bg-blue-500 h-2.5 rounded-full"
-                style={{ width: `${uploadProgress}%` }}
-              ></div>
-            </div>
-            <p className="mt-2 text-sm">{Math.round(uploadProgress)}%</p>
-          </div>
-        )}
+      {/* Modal Content - デザインをダークテーマに統一 */}
+      <div className="relative w-full max-w-lg bg-gray-900 rounded-t-2xl sm:rounded-2xl border-t sm:border border-gray-800 shadow-2xl overflow-hidden flex flex-col max-h-[90dvh]">
+        {/* Mobile Handle Bar */}
+        <div className="w-full flex justify-center pt-3 pb-1 sm:hidden pointer-events-none">
+          <div className="w-12 h-1.5 bg-gray-700 rounded-full" />
+        </div>
 
-        {status === "success" && (
-          <div className="text-center text-green-400">
-            <p>✅ Upload successful!</p>
-            <p className="text-sm">Your video will be available shortly.</p>
-          </div>
-        )}
-
-        {status === "error" && (
-          <div className="text-center text-red-400">
-            <p>❌ Upload failed.</p>
-            <p className="text-sm">{errorMessage}</p>
-          </div>
-        )}
-
-        {status === "idle" && (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onDragEnter={handleDragEnter}
-              onDragLeave={handleDragLeave}
-              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer
-                ${isDragging ? "border-blue-500 bg-gray-800" : "border-gray-600"}`}
+        <div className="p-6 overflow-y-auto">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-bold text-white">Upload Video</h2>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-white transition-colors p-2 rounded-full hover:bg-gray-800"
             >
-              <input
-                id="file-upload"
-                type="file"
-                accept="video/*"
-                onChange={handleFileChange}
-                className="hidden"
-              />
-              <label htmlFor="file-upload" className="cursor-pointer">
-                <p>Drag & drop your video here, or click to select</p>
-                {file && <p className="text-sm text-gray-400 mt-2">{file.name}</p>}
-              </label>
-            </div>
+              ✕
+            </button>
+          </div>
 
-            <div>
-              <label htmlFor="title" className="block text-sm font-medium mb-1">Title</label>
-              <input
-                id="title"
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-md p-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
+          {status === "uploading" ? (
+            <div className="py-10 text-center space-y-4">
+              <div className="w-16 h-16 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto" />
+              <div>
+                <p className="text-lg font-medium text-white mb-2">
+                  Uploading...
+                </p>
+                <div className="w-full bg-gray-800 rounded-full h-4 overflow-hidden border border-gray-700">
+                  <div
+                    className="bg-gradient-to-r from-blue-600 to-blue-400 h-full transition-all duration-300 ease-out"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+                <p className="mt-2 text-sm text-gray-400">
+                  {Math.round(uploadProgress)}%
+                </p>
+              </div>
             </div>
+          ) : status === "success" ? (
+            <div className="py-10 text-center space-y-4">
+              <div className="w-16 h-16 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mx-auto border border-green-500/30">
+                <svg
+                  className="w-8 h-8"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={3}
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              </div>
+              <p className="text-xl font-bold text-white">Upload Complete!</p>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {status === "error" && (
+                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm flex items-start gap-3">
+                   <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>{errorMessage}</span>
+                </div>
+              )}
 
-            <div>
-              <label htmlFor="description" className="block text-sm font-medium mb-1">Description</label>
-              <textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-md p-2 focus:ring-blue-500 focus:border-blue-500"
-                rows={3}
-              />
-            </div>
+              {/* Drag & Drop Area */}
+              <div
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200
+                  ${
+                    isDragging
+                      ? "border-blue-500 bg-blue-500/10"
+                      : "border-gray-700 hover:border-gray-500 hover:bg-gray-800/50"
+                  }`}
+              >
+                <input
+                  id="file-upload"
+                  type="file"
+                  accept="video/*"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="file-upload"
+                  className="cursor-pointer w-full h-full block"
+                >
+                  {file ? (
+                    <div className="flex items-center justify-center gap-2 text-blue-400">
+                      <svg
+                        className="w-6 h-6"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        />
+                      </svg>
+                      <span className="truncate max-w-[200px] font-medium">
+                        {file.name}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="text-gray-400 group">
+                      <p className="text-3xl mb-3 group-hover:scale-110 transition-transform duration-200">☁️</p>
+                      <p className="font-medium text-gray-300">Tap to select video</p>
+                      <p className="text-sm text-gray-500 mt-1">
+                        or drag and drop
+                      </p>
+                    </div>
+                  )}
+                </label>
+              </div>
 
-            <div className="flex justify-end gap-4">
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={!file || !title}>
-                Upload
-              </Button>
-            </div>
-          </form>
-        )}
+              <div className="space-y-4">
+                {/* Title */}
+                <div>
+                  <label
+                    htmlFor="title"
+                    className="block text-sm font-medium text-gray-300 mb-1.5"
+                  >
+                    Title
+                  </label>
+                  <input
+                    id="title"
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                    placeholder="Enter video title"
+                    required
+                  />
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label
+                    htmlFor="description"
+                    className="block text-sm font-medium text-gray-300 mb-1.5"
+                  >
+                    Description
+                  </label>
+                  <textarea
+                    id="description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all resize-none"
+                    rows={3}
+                    placeholder="What's this video about?"
+                  />
+                </div>
+
+                {/* ★追加: Original URL */}
+                <div>
+                  <label
+                    htmlFor="originalUrl"
+                    className="block text-sm font-medium text-gray-300 mb-1.5"
+                  >
+                    Original URL <span className="text-gray-500 text-xs ml-1">(Optional)</span>
+                  </label>
+                  <input
+                    id="originalUrl"
+                    type="url"
+                    value={originalUrl}
+                    onChange={(e) => setOriginalUrl(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                    placeholder="https://..."
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={onClose}
+                  className="flex-1 text-gray-400 hover:text-white hover:bg-gray-800 py-3"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={!file || !title}
+                  className="flex-[2] bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold py-3 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+                >
+                  Upload Video
+                </Button>
+              </div>
+            </form>
+          )}
+        </div>
       </div>
     </div>
   );

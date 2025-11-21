@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
-
-// export const runtime = 'edge';
+import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
 
 export async function GET() {
-  // Per the Next.js error, we should await cookies()
   const cookieStore = await cookies();
-  const supabase = createServerClient(
+  const supabase = await createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -19,61 +16,75 @@ export async function GET() {
     }
   );
 
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-
-    // Per the PostgREST error, we must specify the foreign key relationship
-    const { data: videos, error: videosError } = await supabase
-      .from("videos")
-      .select(
-        `
-        id,
-        title,
-        description,
-        r2ObjectKey:r2_object_key,
-        author:users!videos_author_id_fkey(id, name),
-        likes(count)
+  // 1. 動画リストを取得
+  // r2_compressed_paths を追加取得します
+  const { data: videos, error } = await supabase
+    .from("videos")
+    .select(
       `
-      )
-      .order("created_at", { ascending: false })
-      .limit(20);
+      id,
+      title,
+      description,
+      r2_object_key,
+      r2_compressed_paths, 
+      original_url,
+      created_at,
+      author:users!videos_author_id_fkey ( id, name )
+    `
+    )
+    .order("created_at", { ascending: false })
+    .limit(20);
 
-    if (videosError) throw videosError;
-
-    if (!user) {
-      const result = videos.map(v => ({
-        ...v,
-        likeCount: v.likes[0]?.count || 0,
-        isLiked: false,
-      }));
-      return NextResponse.json(result);
-    }
-
-    const videoIds = videos.map(v => v.id);
-    const { data: userLikes, error: likesError } = await supabase
-      .from('likes')
-      .select('video_id')
-      .in('video_id', videoIds)
-      .eq('user_id', user.id);
-
-    if (likesError) throw likesError;
-
-    const userLikedIds = new Set(userLikes.map(l => l.video_id));
-
-    const finalVideos = videos.map(video => ({
-      ...video,
-      likeCount: video.likes[0]?.count || 0,
-      isLiked: userLikedIds.has(video.id),
-    }));
-
-    return NextResponse.json(finalVideos);
-
-  } catch (error) {
-    console.error("Error fetching feed:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json(
-      { error: "Internal Server Error", details: errorMessage },
-      { status: 500 }
-    );
+  if (error) {
+    console.error("Feed fetch error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // 2. ユーザーのいいね情報を取得 (ログインしている場合)
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  let userLikes = new Set<string>();
+
+  if (user) {
+    const { data: likes } = await supabase
+      .from("likes")
+      .select("video_id")
+      .eq("user_id", user.id);
+
+    if (likes) {
+      likes.forEach((l) => userLikes.add(l.video_id));
+    }
+  }
+
+  // 3. データを整形して返す
+  const safeVideos = videos || [];
+
+  const result = await Promise.all(
+    safeVideos.map(async (v) => {
+      // いいね数を取得
+      const { count } = await supabase
+        .from("likes")
+        .select("*", { count: "exact", head: true })
+        .eq("video_id", v.id);
+
+      const authorData = Array.isArray(v.author) ? v.author[0] : v.author;
+
+      return {
+        id: v.id,
+        title: v.title,
+        description: v.description,
+        r2ObjectKey: v.r2_object_key,
+        // ここで圧縮パスを返却値に含める
+        compressedPaths: v.r2_compressed_paths,
+        originalUrl: v.original_url,
+        author: authorData || { id: "unknown", name: "Unknown" },
+        createdAt: v.created_at,
+        likeCount: count || 0,
+        isLiked: userLikes.has(v.id),
+      };
+    })
+  );
+
+  return NextResponse.json(result);
 }

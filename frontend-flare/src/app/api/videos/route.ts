@@ -40,7 +40,8 @@ export async function POST(request: NextRequest) {
     videoId: z.string().min(1, "Video ID is required"),
     objectKey: z.string().min(1, "Object key is required"),
     title: z.string().min(1, "Title is required"),
-    description: z.string().optional(), // Description is optional
+    description: z.string().optional(),
+    originalUrl: z.string().url().optional().or(z.literal('')), // Allow empty string or valid URL
   });
 
   // Validate the request body using Zod
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { videoId, objectKey, title, description } = validationResult.data;
+  const { videoId, objectKey, title, description, originalUrl } = validationResult.data;
 
   // The documentation requires postgres.js, but it's not installed.
   // Falling back to supabase-js to insert data, respecting the user's
@@ -66,6 +67,7 @@ export async function POST(request: NextRequest) {
       title: title,
       description: description,
       author_id: user.id,
+      original_url: originalUrl, // Add original_url to the insert object
     })
     .select()
     .single();

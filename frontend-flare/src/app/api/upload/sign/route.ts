@@ -1,101 +1,88 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/ssr';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { z } from 'zod';
+import { NextResponse, type NextRequest } from "next/server";
+import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
+import { z } from "zod";
 
-// export const runtime = 'edge';
+// ランタイム指定は標準のままでOK（NodeでもEdgeでも動く）ですが、
+// 余計なトラブルを避けるなら edge 指定しておくと良いです。
+// export const runtime = "edge";
 
 export async function POST(request: NextRequest) {
-  // Add defensive checks for environment variables
-  if (
-    !process.env.CLOUDFLARE_ACCOUNT_ID ||
-    !process.env.R2_ACCESS_KEY_ID ||
-    !process.env.R2_SECRET_ACCESS_KEY ||
-    !process.env.R2_BUCKET_NAME
-  ) {
-    console.error('Error: Missing required R2 environment variables. Please check your .dev.vars file.');
-    return new NextResponse(
-      JSON.stringify({ error: 'Server configuration error: Missing R2 environment variables.' }),
-      { status: 500 }
-    );
+  // 1. ユーザー認証
+  const cookieStore = await cookies();
+  // 環境変数の読み込み (process.env または getCloudflareContext どちらでも動くように)
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    return NextResponse.json({ error: "Server Config Error" }, { status: 500 });
   }
 
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-      },
-    }
-  );
+  const supabase = createServerClient(supabaseUrl, supabaseKey, {
+    cookies: { get: (name) => cookieStore.get(name)?.value },
+  });
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  if (!user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!user) {
-    return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-  }
-
+  // 2. リクエスト検証
   let body;
   try {
     body = await request.json();
-  } catch (e) {
-    return new NextResponse(JSON.stringify({ error: 'Invalid JSON body' }), { status: 400 });
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // Define Zod schema for the request body
-  const UploadSignSchema = z.object({
-    filename: z.string().min(1, "Filename is required"),
-    contentType: z.string().min(1, "ContentType is required"),
+  const schema = z.object({
+    filename: z.string().min(1),
+    contentType: z.string().min(1),
   });
+  const validation = schema.safeParse(body);
+  if (!validation.success)
+    return NextResponse.json({ error: "Invalid body" }, { status: 400 });
 
-  // Validate the request body using Zod
-  const validationResult = UploadSignSchema.safeParse(body);
-
-  if (!validationResult.success) {
-    return new NextResponse(
-      JSON.stringify({ error: 'Invalid request body', details: validationResult.error.flatten() }),
-      { status: 400 }
-    );
-  }
-
-  const { filename, contentType } = validationResult.data;
-
-  const r2 = new S3Client({
-    region: 'auto',
-    endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
-    },
-  });
-
+  // 3. ID生成
+  const { filename, contentType } = validation.data;
   const videoId = crypto.randomUUID();
-  const objectKey = `videos/${user.id}/${videoId}/${filename}`;
+  const objectKey = `${user.id}/${videoId}/${filename}`;
 
-  const command = new PutObjectCommand({
-    Bucket: process.env.R2_BUCKET_NAME!,
-    Key: objectKey,
-    ContentType: contentType,
-  });
+  // 4. 【ここが重要】別で作った backend-signer に署名を依頼する
+  // 環境変数からURLとキーを取得（設定されていない場合のハードコードは開発用）
+  const signerUrl = process.env.SIGNER_WORKER_URL;
+  const internalKey = process.env.INTERNAL_API_KEY;
+
+  if (!signerUrl || !internalKey) {
+    console.error("Missing SIGNER_WORKER_URL or INTERNAL_API_KEY");
+    return NextResponse.json({ error: "Server Config Error" }, { status: 500 });
+  }
 
   try {
-    const uploadUrl = await getSignedUrl(r2, command, { expiresIn: 3600 });
+    const signerRes = await fetch(signerUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Key": internalKey, // 合言葉をセット
+      },
+      body: JSON.stringify({ objectKey, contentType }),
+    });
 
+    if (!signerRes.ok) {
+      throw new Error(await signerRes.text());
+    }
+
+    const { uploadUrl } = (await signerRes.json()) as { uploadUrl: string };
+
+    // 成功！フロントエンドにURLを返す
     return NextResponse.json({
       uploadUrl,
       videoId,
       objectKey,
     });
   } catch (error) {
-    console.error('Error creating signed URL:', error);
-    return new NextResponse(JSON.stringify({ error: 'Failed to create signed URL' }), { status: 500 });
+    console.error("Signer Service Error:", error);
+    return NextResponse.json({ error: "Failed to sign URL" }, { status: 500 });
   }
 }
