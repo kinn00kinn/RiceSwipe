@@ -2,9 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createMiddlewareClient } from "./lib/supabase/utils";
 
 export async function middleware(request: NextRequest) {
-  // --- [追加] 日本国外からのアクセス制限 ---
-  // Cloudflareのヘッダー、またはNext.jsのgeoオブジェクトから国コードを取得
-  const country = request.headers.get("CF-IPCountry") || request.geo?.country;
+  // --- [変更] 日本国外からのアクセス制限 ---
+  // request.geo は型エラーの原因となるため削除し、Cloudflareのヘッダーのみを使用します
+  const country = request.headers.get("CF-IPCountry");
 
   // 国コードが取得でき、かつ 'JP' (日本) でない場合は403エラーを返す
   // ※ ローカル環境(localhost)など国コードが取得できない場合はアクセスを許可します
