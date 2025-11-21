@@ -25,7 +25,7 @@ export default async function Login({ searchParams }: LoginPageProps) {
             <img 
               src="/header.jpg" 
               alt="Header Logo" 
-              className="w-auto h-auto max-w-full object-contain"
+              className="w-auto h-24 max-w-full object-contain"
             />
           </div>
 
