@@ -29,8 +29,8 @@ const GoogleIcon = () => (
 export function LoginForm() {
   // R18同意のチェック状態管理
   const [isAgreed, setIsAgreed] = useState(false);
-
-  // [修正] Turnstile用のStateのコメントアウトを解除
+  
+  // Turnstile用のState
   const [token, setToken] = useState<string | null>(null);
 
   return (
@@ -60,23 +60,25 @@ export function LoginForm() {
         variant="default"
         size="lg"
         className="w-full h-12 bg-white hover:bg-gray-100 text-gray-900 font-medium border border-gray-200 transition-all hover:shadow-lg hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
-        // [修正] R18同意がない、またはTurnstileトークンがない場合は無効化
-        disabled={!isAgreed || !token}
+        // R18同意がない、またはTurnstileトークンがない場合は無効化
+        disabled={!isAgreed || !token} 
       >
         <GoogleIcon />
         Googleでログイン
       </Button>
 
-      <Turnstile
-        siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
-        onSuccess={setToken}
-        onExpire={() => setToken(null)}
-        onError={() => setToken(null)}
-        options={{
-          theme: "dark",
-        }}
-        className="mx-auto"
-      />
+      {/* [修正] Turnstileを中央に配置するためのdivラッパーを追加 */}
+      <div className="flex justify-center w-full">
+        <Turnstile
+          siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
+          onSuccess={setToken}
+          onExpire={() => setToken(null)}
+          onError={() => setToken(null)}
+          options={{
+            theme: "dark",
+          }}
+        />
+      </div>
     </form>
   );
 }
