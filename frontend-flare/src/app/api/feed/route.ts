@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
-// export const dynamic = "force-dynamic";
-
 export async function GET() {
   const cookieStore = await cookies();
   const supabase = await createServerClient(
@@ -19,7 +17,7 @@ export async function GET() {
   );
 
   // 1. 動画リストを取得
-  // videos_author_id_fkey を明示して、likesテーブル経由の関係と区別します
+  // r2_compressed_paths を追加取得します
   const { data: videos, error } = await supabase
     .from("videos")
     .select(
@@ -28,6 +26,7 @@ export async function GET() {
       title,
       description,
       r2_object_key,
+      r2_compressed_paths, 
       original_url,
       created_at,
       author:users!videos_author_id_fkey ( id, name )
@@ -69,7 +68,6 @@ export async function GET() {
         .select("*", { count: "exact", head: true })
         .eq("video_id", v.id);
 
-      // author が配列で返ってくる場合のハンドリング
       const authorData = Array.isArray(v.author) ? v.author[0] : v.author;
 
       return {
@@ -77,6 +75,8 @@ export async function GET() {
         title: v.title,
         description: v.description,
         r2ObjectKey: v.r2_object_key,
+        // ここで圧縮パスを返却値に含める
+        compressedPaths: v.r2_compressed_paths,
         originalUrl: v.original_url,
         author: authorData || { id: "unknown", name: "Unknown" },
         createdAt: v.created_at,

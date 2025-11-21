@@ -35,13 +35,13 @@ export function LoginForm() {
         variant="default"
         size="lg"
         className="w-full h-12 bg-white hover:bg-gray-100 text-gray-900 font-medium border border-gray-200 transition-all hover:shadow-lg hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
-        disabled={!token}
+        // disabled={!token}
       >
         <GoogleIcon />
         Continue with Google
       </Button>
 
-      <Turnstile
+      {/* <Turnstile
         siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
         onSuccess={setToken}
         onExpire={() => setToken(null)}
@@ -50,7 +50,7 @@ export function LoginForm() {
           theme: "dark",
         }}
         className="mx-auto"
-      />
+      /> */}
     </form>
   );
 }
