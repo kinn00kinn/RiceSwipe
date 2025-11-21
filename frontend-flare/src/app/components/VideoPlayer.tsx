@@ -1,5 +1,3 @@
-// src/app/components/VideoPlayer.tsx
-
 "use client";
 
 import React, { useEffect, useRef, useState, useMemo } from "react";
@@ -18,7 +16,7 @@ type VideoFromApi = VideoType & {
 interface VideoPlayerProps {
   video: VideoFromApi;
   isActive: boolean;
-  onUploadRequest: () => void; // 追加
+  onUploadRequest: () => void;
 }
 
 const R2_PUBLIC_DOMAIN = process.env.NEXT_PUBLIC_R2_PUBLIC_DOMAIN;
@@ -26,7 +24,7 @@ const LONG_PRESS_DURATION = 300;
 const MOVE_THRESHOLD = 10;
 const DOUBLE_TAP_WINDOW = 300;
 const FAST_FORWARD_RATE = 2.0;
-const REWIND_SPEED_SEC_PER_SEC = 3.0; // 巻き戻し速度
+const REWIND_SPEED_SEC_PER_SEC = 3.0; // 1秒間に3秒戻る（リワインド速度）
 
 // --- Icons ---
 const RewindIcon = () => (
@@ -39,7 +37,11 @@ const RewindIcon = () => (
   </svg>
 );
 
-export default function VideoPlayer({ video, isActive ,onUploadRequest}: VideoPlayerProps) {
+export default function VideoPlayer({
+  video,
+  isActive,
+  onUploadRequest,
+}: VideoPlayerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const progressRef = useRef<HTMLDivElement | null>(null);
@@ -61,8 +63,14 @@ export default function VideoPlayer({ video, isActive ,onUploadRequest}: VideoPl
   const longPressTimerRef = useRef<number | null>(null);
   const singleTapTimerRef = useRef<number | null>(null);
   const seekingRef = useRef(false);
+
+  // Rewind Refs
   const rewindRafRef = useRef<number | null>(null);
-  const rewindLastRef = useRef<number | null>(null);
+  // 絶対計算用に開始時の状態を保持するRef
+  const rewindStartDataRef = useRef<{
+    timestamp: number;
+    videoTime: number;
+  } | null>(null);
 
   // URL解決ロジック
   const videoSrc = useMemo(() => {
@@ -77,6 +85,73 @@ export default function VideoPlayer({ video, isActive ,onUploadRequest}: VideoPl
     return `${R2_PUBLIC_DOMAIN}/${key}`;
   }, [video.r2ObjectKey, video.compressedPaths]);
 
+  // --- Logic: Rewind (Absolute Time Calculation) ---
+  const stopRewind = () => {
+    if (rewindRafRef.current) {
+      cancelAnimationFrame(rewindRafRef.current);
+      rewindRafRef.current = null;
+    }
+    rewindStartDataRef.current = null;
+  };
+
+  const startRewind = () => {
+    stopRewind();
+
+    const el = videoRef.current;
+    if (!el) return;
+
+    // 1. 再生を一時停止し、標準速度に戻す
+    el.pause();
+    el.playbackRate = 1.0;
+
+    // 2. 「開始時点の壁時計時刻」と「開始時点の動画内再生時間」を記録
+    // これが絶対時間の基準点になります
+    rewindStartDataRef.current = {
+      timestamp: performance.now(),
+      videoTime: el.currentTime,
+    };
+
+    const loop = (now: number) => {
+      const el = videoRef.current;
+      const startData = rewindStartDataRef.current;
+
+      if (!el || !startData) {
+        rewindRafRef.current = null;
+        return;
+      }
+
+      // 3. 経過時間（秒）を計算
+      const elapsedSec = (now - startData.timestamp) / 1000;
+
+      // 4. 目標時間を計算 (開始位置 - 経過時間 * 速度)
+      // どんなに処理落ちしても、この計算式なら「あるべき時間」は常に一定速度で進みます
+      const targetTime = Math.max(
+        0,
+        startData.videoTime - elapsedSec * REWIND_SPEED_SEC_PER_SEC
+      );
+
+      // 5. シーク実行 (まだ前のシーク中ならスキップして、次のフレームで最新の位置へ飛ぶ)
+      if (!el.seeking) {
+        el.currentTime = targetTime;
+      }
+
+      // 6. ループ継続判定
+      if (targetTime > 0) {
+        rewindRafRef.current = requestAnimationFrame(loop);
+      } else {
+        // 先頭に到達
+        stopRewind();
+        el.currentTime = 0;
+        // 再開時は再生を試みる
+        el.play().catch(() => {});
+        setFfDirection(null);
+      }
+    };
+
+    rewindRafRef.current = requestAnimationFrame(loop);
+  };
+
+  // --- Effects ---
   useEffect(() => {
     setIsLiked(video.isLiked);
     setLikeCount(video.likeCount);
@@ -117,7 +192,7 @@ export default function VideoPlayer({ video, isActive ,onUploadRequest}: VideoPl
     };
   }, []);
 
-  // --- いいね機能のロジック (これが抜けていました) ---
+  // --- Handlers ---
   const doLike = async () => {
     const orig = isLiked;
     const origCount = likeCount;
@@ -134,15 +209,13 @@ export default function VideoPlayer({ video, isActive ,onUploadRequest}: VideoPl
     }
   };
 
-  // --- ハンドラーの実装 ---
   const handleLike = (e: React.MouseEvent) => {
     e.stopPropagation();
-    doLike(); // ロジックを実行
+    doLike();
   };
 
   const handleShare = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    // シェア機能のロジック
     if (navigator.share) {
       try {
         await navigator.share({
@@ -165,7 +238,6 @@ export default function VideoPlayer({ video, isActive ,onUploadRequest}: VideoPl
     setIsMuted((prev) => !prev);
   };
 
-  // ジェスチャー関連
   const clearLongPress = () => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
@@ -185,48 +257,15 @@ export default function VideoPlayer({ video, isActive ,onUploadRequest}: VideoPl
     else el.pause();
   };
 
-  const startRewind = () => {
-    stopRewind();
-    rewindLastRef.current = performance.now();
-    const loop = (t: number) => {
-      const el = videoRef.current;
-      if (!el) {
-        rewindRafRef.current = null;
-        return;
-      }
-      const last = rewindLastRef.current ?? t;
-      const dt = (t - last) / 1000;
-      rewindLastRef.current = t;
-      const newTime = Math.max(
-        0,
-        el.currentTime - REWIND_SPEED_SEC_PER_SEC * dt
-      );
-      el.currentTime = newTime;
-      if (newTime > 0) {
-        rewindRafRef.current = requestAnimationFrame(loop);
-      } else {
-        stopRewind();
-        el.play().catch(() => {});
-        setFfDirection(null);
-      }
-    };
-    rewindRafRef.current = requestAnimationFrame(loop);
-  };
-
-  const stopRewind = () => {
-    if (rewindRafRef.current) {
-      cancelAnimationFrame(rewindRafRef.current);
-      rewindRafRef.current = null;
-    }
-    rewindLastRef.current = null;
-  };
-
+  // --- Gestures ---
   const startLongPressTimer = (pointerId?: number, target?: Element) => {
     clearLongPress();
     longPressTimerRef.current = window.setTimeout(() => {
       setLongPressActive(true);
+      // 長押し開始時は早送り(forward)からスタート
       setFfDirection("forward");
       if (videoRef.current) videoRef.current.playbackRate = FAST_FORWARD_RATE;
+
       if (pointerId !== undefined && target) {
         try {
           target.setPointerCapture?.(pointerId);
@@ -238,6 +277,7 @@ export default function VideoPlayer({ video, isActive ,onUploadRequest}: VideoPl
   const onPointerDown = (e: React.PointerEvent) => {
     startRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
     const now = Date.now();
+    // Double Tap Logic
     if (
       lastTapTimeRef.current &&
       now - lastTapTimeRef.current <= DOUBLE_TAP_WINDOW
@@ -271,23 +311,29 @@ export default function VideoPlayer({ video, isActive ,onUploadRequest}: VideoPl
     const dy = e.clientY - s.y;
     const adx = Math.abs(dx);
     const ady = Math.abs(dy);
+
     if (!longPressActive && ady > MOVE_THRESHOLD && ady > adx) {
       clearLongPress();
     }
+
     if (longPressActive) {
       if (adx > MOVE_THRESHOLD && adx > ady) {
         if (dx > 0) {
+          // Forward (右へドラッグ)
           if (ffDirection !== "forward") {
             setFfDirection("forward");
             stopRewind();
-            if (videoRef.current)
+            if (videoRef.current) {
+              if (videoRef.current.paused)
+                videoRef.current.play().catch(() => {});
               videoRef.current.playbackRate = FAST_FORWARD_RATE;
+            }
           }
         } else {
+          // Rewind (左へドラッグ)
           if (ffDirection !== "rewind") {
             setFfDirection("rewind");
-            if (videoRef.current) videoRef.current.playbackRate = 1.0;
-            startRewind();
+            startRewind(); // 絶対時間ベースのリワインドを開始
           }
         }
         e.preventDefault();
@@ -303,27 +349,36 @@ export default function VideoPlayer({ video, isActive ,onUploadRequest}: VideoPl
         (e.currentTarget as Element).releasePointerCapture?.(id);
       } catch {}
     }
+
     if (longPressActive) {
       setLongPressActive(false);
+
+      // 終了処理: 速度を戻す
       if (videoRef.current) videoRef.current.playbackRate = 1.0;
+
       stopRewind();
-      if (ffDirection === "rewind") {
-        if (videoRef.current && !videoRef.current.paused)
-          videoRef.current.play().catch(() => {});
+
+      // 再生再開（停止していた場合）
+      if (videoRef.current?.paused) {
+        videoRef.current.play().catch(() => {});
       }
+
       setFfDirection(null);
       startRef.current = null;
       return;
     }
+
     const s = startRef.current;
     const dx = s ? Math.abs(e.clientX - s.x) : 0;
     const dy = s ? Math.abs(e.clientY - s.y) : 0;
     startRef.current = null;
+
     if (dx <= MOVE_THRESHOLD && dy <= MOVE_THRESHOLD) {
       togglePlay();
     }
   };
 
+  // Progress Bar Handlers
   const progressHandlers = {
     down: (e: React.PointerEvent) => {
       e.stopPropagation();
@@ -391,14 +446,12 @@ export default function VideoPlayer({ video, isActive ,onUploadRequest}: VideoPl
       />
 
       {/* UI Overlay Layer */}
-      {/* 重要: ここは pointer-events-none です */}
       <div
         className="absolute inset-0 flex flex-col justify-end pointer-events-none z-20 ui-overlay"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-24 pb-4 px-4">
           <div className="flex items-end gap-4">
-            {/* 情報オーバーレイ */}
             <VideoInfoOverlay
               authorName={video.author.name}
               title={video.title}
@@ -406,10 +459,8 @@ export default function VideoPlayer({ video, isActive ,onUploadRequest}: VideoPl
               progress={progress}
               progressRef={progressRef}
               onProgressInteract={progressHandlers}
-              
             />
 
-            {/* アクションボタン */}
             <VideoActionButtons
               isLiked={isLiked}
               likeCount={likeCount}
@@ -418,7 +469,7 @@ export default function VideoPlayer({ video, isActive ,onUploadRequest}: VideoPl
               onShare={handleShare}
               isMuted={isMuted}
               onToggleMute={handleToggleMute}
-              onUploadRequest={onUploadRequest} // 追加: バケツリレー
+              onUploadRequest={onUploadRequest}
             />
           </div>
         </div>
