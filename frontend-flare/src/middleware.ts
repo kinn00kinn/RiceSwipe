@@ -74,8 +74,11 @@ export const config = {
      * - /auth/callback (Supabase auth callback)
      * - /pending-approval (The page where pending users are redirected)
      * - /auth/signout (The sign out route) [変更点]
+     * - manifest.webmanifest (PWA manifest) [★追加]
+     * - manifest.json (PWA manifest alias) [★追加]
+     * - favicon.png (PWA icon) [★追加]
      */
     // [変更点] |auth/signout を追加
-    "/((?!_next/static|_next/image|favicon.ico|auth/callback|pending-approval|auth/signout).*)",
+    "/((?!_next/static|_next/image|favicon.ico|favicon.png|auth/callback|pending-approval|auth/signout|manifest.webmanifest|manifest.json).*)",
   ],
 };
