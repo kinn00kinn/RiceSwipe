@@ -1,10 +1,16 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+  useCallback,
+} from "react";
 import type { Video as VideoType } from "@prisma/client";
 import { VideoInfoOverlay } from "./player/VideoInfoOverlay";
 import { VideoActionButtons } from "./player/VideoActionButtons";
-import { AddToListModal } from "./lists/AddToListModal"; // インポート
+import { AddToListModal } from "./lists/AddToListModal";
 
 type VideoFromApi = VideoType & {
   author: { id: string; name: string | null };
@@ -20,7 +26,6 @@ interface VideoPlayerProps {
   onUploadRequest: () => void;
 }
 
-// ... (定数やアイコンは変更なし)
 const R2_PUBLIC_DOMAIN = process.env.NEXT_PUBLIC_R2_PUBLIC_DOMAIN;
 const LONG_PRESS_DURATION = 300;
 const MOVE_THRESHOLD = 10;
@@ -37,7 +42,6 @@ const RewindIcon = () => (
     <path d="M11 19V5l-9 7 9 7zm11 0V5l-9 7 9 7z" />
   </svg>
 );
-
 
 export default function VideoPlayer({
   video,
@@ -57,9 +61,12 @@ export default function VideoPlayer({
     null
   );
   const [isMuted, setIsMuted] = useState(false);
-  const [isAddToListModalOpen, setAddToListModalOpen] = useState(false); // Stateをここに移動
+  const [isAddToListModalOpen, setAddToListModalOpen] = useState(false);
 
-  // ... (RefsやuseMemoは変更なし)
+  // ★ UI表示管理用のState
+  const [isUiVisible, setUiVisible] = useState(true);
+  const uiTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   const startRef = useRef<{ x: number; y: number; id?: number } | null>(null);
   const lastTapTimeRef = useRef<number | null>(null);
   const lastTapPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -71,6 +78,7 @@ export default function VideoPlayer({
     timestamp: number;
     videoTime: number;
   } | null>(null);
+
   const videoSrc = useMemo(() => {
     if (!R2_PUBLIC_DOMAIN) return "";
     const paths = video.compressedPaths as Record<string, string> | null;
@@ -83,7 +91,28 @@ export default function VideoPlayer({
     return `${R2_PUBLIC_DOMAIN}/${key}`;
   }, [video.r2ObjectKey, video.compressedPaths]);
 
-  // ... (ロジックやエフェクトは変更なし)
+  // ★ UIを表示し、3秒後に非表示にする関数
+  const showUiAndResetTimer = useCallback(() => {
+    setUiVisible(true);
+    if (uiTimerRef.current) clearTimeout(uiTimerRef.current);
+
+    // モーダルが開いているときは消さない
+    if (isAddToListModalOpen) return;
+
+    uiTimerRef.current = setTimeout(() => {
+      // 再生中かつ操作していないなら消す
+      if (videoRef.current && !videoRef.current.paused) {
+        setUiVisible(false);
+      }
+    }, 3000);
+  }, [isAddToListModalOpen]);
+
+  // ユーザーインタラクション時のハンドラ
+  const handleUserInteraction = () => {
+    showUiAndResetTimer();
+  };
+
+  // --- Rewind Logic ---
   const stopRewind = () => {
     if (rewindRafRef.current) {
       cancelAnimationFrame(rewindRafRef.current);
@@ -114,9 +143,7 @@ export default function VideoPlayer({
         0,
         startData.videoTime - elapsedSec * REWIND_SPEED_SEC_PER_SEC
       );
-      if (!el.seeking) {
-        el.currentTime = targetTime;
-      }
+      if (!el.seeking) el.currentTime = targetTime;
       if (targetTime > 0) {
         rewindRafRef.current = requestAnimationFrame(loop);
       } else {
@@ -140,6 +167,7 @@ export default function VideoPlayer({
     if (!el) return;
     if (isActive) {
       el.play().catch(() => setIsPlaying(false));
+      showUiAndResetTimer(); // 再生開始時にタイマー始動
     } else {
       el.pause();
       el.currentTime = 0;
@@ -148,8 +176,10 @@ export default function VideoPlayer({
       setFfDirection(null);
       el.playbackRate = 1.0;
       stopRewind();
+      setUiVisible(true); // 停止中は表示
+      if (uiTimerRef.current) clearTimeout(uiTimerRef.current);
     }
-  }, [isActive]);
+  }, [isActive, showUiAndResetTimer]);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -175,6 +205,7 @@ export default function VideoPlayer({
     const origCount = likeCount;
     setIsLiked(!orig);
     setLikeCount(orig ? origCount - 1 : origCount + 1);
+    handleUserInteraction();
     try {
       const method = orig ? "DELETE" : "POST";
       const res = await fetch(`/api/videos/${video.id}/like`, { method });
@@ -194,10 +225,14 @@ export default function VideoPlayer({
   const handleOpenAddToList = (e: React.MouseEvent) => {
     e.stopPropagation();
     setAddToListModalOpen(true);
+    // モーダルが開くのでタイマーはクリア
+    if (uiTimerRef.current) clearTimeout(uiTimerRef.current);
+    setUiVisible(true);
   };
 
   const handleShare = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    handleUserInteraction();
     if (navigator.share) {
       try {
         await navigator.share({
@@ -217,6 +252,7 @@ export default function VideoPlayer({
 
   const handleToggleMute = (e: React.MouseEvent) => {
     e.stopPropagation();
+    handleUserInteraction();
     setIsMuted((prev) => !prev);
   };
 
@@ -232,14 +268,27 @@ export default function VideoPlayer({
       singleTapTimerRef.current = null;
     }
   };
+
   const togglePlay = () => {
+    // UIが消えている場合は、まずUIを表示して終了（再生状態は変えない）
+    if (!isUiVisible) {
+      showUiAndResetTimer();
+      return;
+    }
+
     const el = videoRef.current;
     if (!el) return;
-    if (el.paused) el.play().catch(() => {});
-    else el.pause();
+    if (el.paused) {
+      el.play().catch(() => {});
+      showUiAndResetTimer();
+    } else {
+      el.pause();
+      setUiVisible(true);
+      if (uiTimerRef.current) clearTimeout(uiTimerRef.current);
+    }
   };
 
-  // ... (ジェスチャーハンドラは変更なし)
+  // --- Gesture Handlers ---
   const startLongPressTimer = (pointerId?: number, target?: Element) => {
     clearLongPress();
     longPressTimerRef.current = window.setTimeout(() => {
@@ -256,6 +305,7 @@ export default function VideoPlayer({
 
   const onPointerDown = (e: React.PointerEvent) => {
     startRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    handleUserInteraction(); // UI表示更新
     const now = Date.now();
     if (
       lastTapTimeRef.current &&
@@ -336,6 +386,8 @@ export default function VideoPlayer({
       }
       setFfDirection(null);
       startRef.current = null;
+      // 操作後はタイマー再設定
+      showUiAndResetTimer();
       return;
     }
 
@@ -353,6 +405,7 @@ export default function VideoPlayer({
     down: (e: React.PointerEvent) => {
       e.stopPropagation();
       e.preventDefault();
+      handleUserInteraction();
       seekingRef.current = true;
       (e.target as Element).setPointerCapture?.(e.pointerId);
       updateProgressFromEvent(e);
@@ -360,11 +413,13 @@ export default function VideoPlayer({
     move: (e: React.PointerEvent) => {
       if (!seekingRef.current) return;
       e.preventDefault();
+      handleUserInteraction();
       updateProgressFromEvent(e);
     },
     up: (e: React.PointerEvent) => {
       e.stopPropagation();
       e.preventDefault();
+      handleUserInteraction();
       seekingRef.current = false;
       (e.target as Element).releasePointerCapture?.(e.pointerId);
     },
@@ -416,12 +471,16 @@ export default function VideoPlayer({
           style={{ touchAction: "pan-y" }}
         />
 
-        {/* UI Overlay Layer */}
+        {/* UI Overlay Layer: 不透明度とポインターイベントを制御 */}
         <div
-          className="absolute inset-0 flex flex-col justify-end pointer-events-none z-20 ui-overlay"
+          className={`absolute inset-0 flex flex-col justify-end z-20 ui-overlay transition-opacity duration-300 ${
+            isUiVisible
+              ? "opacity-100 pointer-events-none"
+              : "opacity-0 pointer-events-none"
+          }`}
           style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         >
-          <div className="w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-24 pb-4 px-4">
+          <div className="w-full bg-gradient-to-t from-black/90 via-black/40 to-transparent pt-32 pb-4 px-4">
             <div className="flex items-end gap-4">
               <VideoInfoOverlay
                 authorName={video.author.name}
@@ -432,17 +491,23 @@ export default function VideoPlayer({
                 onProgressInteract={progressHandlers}
               />
 
-              <VideoActionButtons
-                isLiked={isLiked}
-                likeCount={likeCount}
-                onLike={handleLike}
-                onOpenAddToList={handleOpenAddToList}
-                originalUrl={video.originalUrl}
-                onShare={handleShare}
-                isMuted={isMuted}
-                onToggleMute={handleToggleMute}
-                onUploadRequest={onUploadRequest}
-              />
+              <div
+                className={`transition-opacity duration-300 ${
+                  isUiVisible ? "pointer-events-auto" : "pointer-events-none"
+                }`}
+              >
+                <VideoActionButtons
+                  isLiked={isLiked}
+                  likeCount={likeCount}
+                  onLike={handleLike}
+                  onOpenAddToList={handleOpenAddToList}
+                  originalUrl={video.originalUrl}
+                  onShare={handleShare}
+                  isMuted={isMuted}
+                  onToggleMute={handleToggleMute}
+                  onUploadRequest={onUploadRequest}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -466,7 +531,7 @@ export default function VideoPlayer({
         )}
       </div>
 
-      {/* モーダルをここにレンダリング */}
+      {/* モーダル */}
       {isAddToListModalOpen && (
         <AddToListModal
           videoId={video.id}
@@ -476,4 +541,3 @@ export default function VideoPlayer({
     </>
   );
 }
-
