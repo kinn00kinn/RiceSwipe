@@ -91,8 +91,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabase
     .from("lists")
     .select("*")
-    .eq("owner_id", user.id)
-    .order("created_at", { ascending: false } as any); // DBカラムにcreated_atがない場合はid順等に変更
+    .eq("owner_id", user.id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

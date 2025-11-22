@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 // --- Icons ---
-// 既存のアイコン...
+// ... (アイコン定義は変更なし)
 const HeartIcon = ({ isFilled }: { isFilled: boolean }) => (
   <svg className={`w-8 h-8 drop-shadow-lg transition-colors ${isFilled ? "text-red-500" : "text-white"}`} fill={isFilled ? "currentColor" : "rgba(0,0,0,0.3)"} stroke={isFilled ? "none" : "currentColor"} strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.5l1.318-1.182a4.5 4.5 0 116.364 6.364L12 21l-7.682-7.318a4.5 4.5 0 010-6.364z"></path></svg>
 );
@@ -17,33 +17,34 @@ const ShareIcon = () => (
 const LinkIcon = () => (
   <svg className="w-7 h-7 text-white drop-shadow-md" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
 );
-// 新規: メニューアイコン
 const MenuIcon = () => (
   <svg className="w-7 h-7 text-white drop-shadow-md" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>
 );
-// 新規: アップロードアイコン
 const UploadIcon = () => (
   <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" x2="12" y1="3" y2="15" /></svg>
 );
-// 新規: ログアウトアイコン
 const LogOutIcon = () => (
   <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" x2="9" y1="12" y2="12" /></svg>
 );
+const BookmarkIcon = () => (
+  <svg className="w-8 h-8 text-white drop-shadow-lg" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path></svg>
+);
+
 
 interface VideoActionButtonsProps {
   isLiked: boolean;
   likeCount: number;
   onLike: (e: React.MouseEvent) => void;
+  onOpenAddToList: (e: React.MouseEvent) => void; // 変更
   originalUrl?: string | null;
   onShare: (e: React.MouseEvent) => void;
   isMuted: boolean;
   onToggleMute: (e: React.MouseEvent) => void;
-  // 新規: アップロード用コールバック
   onUploadRequest: () => void;
 }
 
 export const VideoActionButtons = React.memo(({
-  isLiked, likeCount, onLike, originalUrl, onShare, isMuted, onToggleMute, onUploadRequest
+  isLiked, likeCount, onLike, onOpenAddToList, originalUrl, onShare, isMuted, onToggleMute, onUploadRequest
 }: VideoActionButtonsProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -75,6 +76,14 @@ export const VideoActionButtons = React.memo(({
         <span className="text-white text-xs font-bold drop-shadow-md">{likeCount}</span>
       </button>
 
+      {/* Add to List (Save) Button */}
+      <button onClick={onOpenAddToList} className="flex flex-col items-center group gap-1">
+        <div className="transform transition-transform duration-200 active:scale-75 group-hover:scale-110">
+          <BookmarkIcon />
+        </div>
+        <span className="text-white text-xs font-bold drop-shadow-md">Save</span>
+      </button>
+
       {/* Link */}
       {originalUrl && (
         <a
@@ -104,7 +113,7 @@ export const VideoActionButtons = React.memo(({
         {isMuted ? <VolumeOffIcon /> : <VolumeOnIcon />}
       </button>
 
-      {/* Menu Button (New) */}
+      {/* Menu Button */}
       <div className="relative">
         <button 
           onClick={toggleMenu}
@@ -116,7 +125,6 @@ export const VideoActionButtons = React.memo(({
         {/* Popup Menu */}
         {isMenuOpen && (
           <div className="absolute bottom-full right-12 mb-[-20px] flex flex-col gap-2 bg-black/80 backdrop-blur-md p-2 rounded-xl border border-white/10 min-w-[140px] animate-in fade-in zoom-in duration-200 origin-bottom-right">
-            {/* Upload Button */}
             <button 
               onClick={(e) => {
                 e.stopPropagation();
@@ -128,8 +136,6 @@ export const VideoActionButtons = React.memo(({
               <UploadIcon />
               <span>Upload</span>
             </button>
-
-            {/* Logout Button */}
             <form action="/auth/signout" method="post" className="w-full">
                <button 
                  type="submit"
@@ -143,7 +149,6 @@ export const VideoActionButtons = React.memo(({
         )}
       </div>
       
-      {/* メニューを開いている時に背景クリックで閉じるための透明レイヤー */}
       {isMenuOpen && (
         <div 
           className="fixed inset-0 z-[-1]" 

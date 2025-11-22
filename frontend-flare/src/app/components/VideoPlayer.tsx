@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState, useMemo } from "react";
 import type { Video as VideoType } from "@prisma/client";
 import { VideoInfoOverlay } from "./player/VideoInfoOverlay";
 import { VideoActionButtons } from "./player/VideoActionButtons";
+import { AddToListModal } from "./lists/AddToListModal"; // インポート
 
 type VideoFromApi = VideoType & {
   author: { id: string; name: string | null };
@@ -19,14 +20,14 @@ interface VideoPlayerProps {
   onUploadRequest: () => void;
 }
 
+// ... (定数やアイコンは変更なし)
 const R2_PUBLIC_DOMAIN = process.env.NEXT_PUBLIC_R2_PUBLIC_DOMAIN;
 const LONG_PRESS_DURATION = 300;
 const MOVE_THRESHOLD = 10;
 const DOUBLE_TAP_WINDOW = 300;
 const FAST_FORWARD_RATE = 2.0;
-const REWIND_SPEED_SEC_PER_SEC = 3.0; // 1秒間に3秒戻る（リワインド速度）
+const REWIND_SPEED_SEC_PER_SEC = 3.0;
 
-// --- Icons ---
 const RewindIcon = () => (
   <svg
     className="w-10 h-10 text-white animate-pulse drop-shadow-lg"
@@ -36,6 +37,7 @@ const RewindIcon = () => (
     <path d="M11 19V5l-9 7 9 7zm11 0V5l-9 7 9 7z" />
   </svg>
 );
+
 
 export default function VideoPlayer({
   video,
@@ -55,24 +57,20 @@ export default function VideoPlayer({
     null
   );
   const [isMuted, setIsMuted] = useState(false);
+  const [isAddToListModalOpen, setAddToListModalOpen] = useState(false); // Stateをここに移動
 
-  // Refs
+  // ... (RefsやuseMemoは変更なし)
   const startRef = useRef<{ x: number; y: number; id?: number } | null>(null);
   const lastTapTimeRef = useRef<number | null>(null);
   const lastTapPosRef = useRef<{ x: number; y: number } | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const singleTapTimerRef = useRef<number | null>(null);
   const seekingRef = useRef(false);
-
-  // Rewind Refs
   const rewindRafRef = useRef<number | null>(null);
-  // 絶対計算用に開始時の状態を保持するRef
   const rewindStartDataRef = useRef<{
     timestamp: number;
     videoTime: number;
   } | null>(null);
-
-  // URL解決ロジック
   const videoSrc = useMemo(() => {
     if (!R2_PUBLIC_DOMAIN) return "";
     const paths = video.compressedPaths as Record<string, string> | null;
@@ -85,7 +83,7 @@ export default function VideoPlayer({
     return `${R2_PUBLIC_DOMAIN}/${key}`;
   }, [video.r2ObjectKey, video.compressedPaths]);
 
-  // --- Logic: Rewind (Absolute Time Calculation) ---
+  // ... (ロジックやエフェクトは変更なし)
   const stopRewind = () => {
     if (rewindRafRef.current) {
       cancelAnimationFrame(rewindRafRef.current);
@@ -96,62 +94,41 @@ export default function VideoPlayer({
 
   const startRewind = () => {
     stopRewind();
-
     const el = videoRef.current;
     if (!el) return;
-
-    // 1. 再生を一時停止し、標準速度に戻す
     el.pause();
     el.playbackRate = 1.0;
-
-    // 2. 「開始時点の壁時計時刻」と「開始時点の動画内再生時間」を記録
-    // これが絶対時間の基準点になります
     rewindStartDataRef.current = {
       timestamp: performance.now(),
       videoTime: el.currentTime,
     };
-
     const loop = (now: number) => {
       const el = videoRef.current;
       const startData = rewindStartDataRef.current;
-
       if (!el || !startData) {
         rewindRafRef.current = null;
         return;
       }
-
-      // 3. 経過時間（秒）を計算
       const elapsedSec = (now - startData.timestamp) / 1000;
-
-      // 4. 目標時間を計算 (開始位置 - 経過時間 * 速度)
-      // どんなに処理落ちしても、この計算式なら「あるべき時間」は常に一定速度で進みます
       const targetTime = Math.max(
         0,
         startData.videoTime - elapsedSec * REWIND_SPEED_SEC_PER_SEC
       );
-
-      // 5. シーク実行 (まだ前のシーク中ならスキップして、次のフレームで最新の位置へ飛ぶ)
       if (!el.seeking) {
         el.currentTime = targetTime;
       }
-
-      // 6. ループ継続判定
       if (targetTime > 0) {
         rewindRafRef.current = requestAnimationFrame(loop);
       } else {
-        // 先頭に到達
         stopRewind();
         el.currentTime = 0;
-        // 再開時は再生を試みる
         el.play().catch(() => {});
         setFfDirection(null);
       }
     };
-
     rewindRafRef.current = requestAnimationFrame(loop);
   };
 
-  // --- Effects ---
   useEffect(() => {
     setIsLiked(video.isLiked);
     setLikeCount(video.likeCount);
@@ -214,6 +191,11 @@ export default function VideoPlayer({
     doLike();
   };
 
+  const handleOpenAddToList = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setAddToListModalOpen(true);
+  };
+
   const handleShare = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (navigator.share) {
@@ -257,15 +239,13 @@ export default function VideoPlayer({
     else el.pause();
   };
 
-  // --- Gestures ---
+  // ... (ジェスチャーハンドラは変更なし)
   const startLongPressTimer = (pointerId?: number, target?: Element) => {
     clearLongPress();
     longPressTimerRef.current = window.setTimeout(() => {
       setLongPressActive(true);
-      // 長押し開始時は早送り(forward)からスタート
       setFfDirection("forward");
       if (videoRef.current) videoRef.current.playbackRate = FAST_FORWARD_RATE;
-
       if (pointerId !== undefined && target) {
         try {
           target.setPointerCapture?.(pointerId);
@@ -277,7 +257,6 @@ export default function VideoPlayer({
   const onPointerDown = (e: React.PointerEvent) => {
     startRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
     const now = Date.now();
-    // Double Tap Logic
     if (
       lastTapTimeRef.current &&
       now - lastTapTimeRef.current <= DOUBLE_TAP_WINDOW
@@ -319,7 +298,6 @@ export default function VideoPlayer({
     if (longPressActive) {
       if (adx > MOVE_THRESHOLD && adx > ady) {
         if (dx > 0) {
-          // Forward (右へドラッグ)
           if (ffDirection !== "forward") {
             setFfDirection("forward");
             stopRewind();
@@ -330,10 +308,9 @@ export default function VideoPlayer({
             }
           }
         } else {
-          // Rewind (左へドラッグ)
           if (ffDirection !== "rewind") {
             setFfDirection("rewind");
-            startRewind(); // 絶対時間ベースのリワインドを開始
+            startRewind();
           }
         }
         e.preventDefault();
@@ -352,17 +329,11 @@ export default function VideoPlayer({
 
     if (longPressActive) {
       setLongPressActive(false);
-
-      // 終了処理: 速度を戻す
       if (videoRef.current) videoRef.current.playbackRate = 1.0;
-
       stopRewind();
-
-      // 再生再開（停止していた場合）
       if (videoRef.current?.paused) {
         videoRef.current.play().catch(() => {});
       }
-
       setFfDirection(null);
       startRef.current = null;
       return;
@@ -378,7 +349,6 @@ export default function VideoPlayer({
     }
   };
 
-  // Progress Bar Handlers
   const progressHandlers = {
     down: (e: React.PointerEvent) => {
       e.stopPropagation();
@@ -411,87 +381,99 @@ export default function VideoPlayer({
   };
 
   return (
-    <div
-      ref={containerRef}
-      tabIndex={-1}
-      className="relative w-full h-screen snap-start pointer-events-auto bg-black select-none overflow-hidden"
-    >
-      <div className="flex items-center justify-center h-full bg-black">
-        <video
-          ref={videoRef}
-          src={videoSrc}
-          loop
-          playsInline
-          muted={isMuted}
-          preload="metadata"
-          className="w-full h-auto max-h-full object-contain pointer-events-none"
-        />
-      </div>
-
-      {/* Gesture Layer */}
+    <>
       <div
-        className="absolute inset-0 z-10 ui-gesture"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={() => {
-          clearLongPress();
-          setLongPressActive(false);
-          setFfDirection(null);
-          stopRewind();
-          startRef.current = null;
-        }}
-        onContextMenu={(e) => e.preventDefault()}
-        style={{ touchAction: "pan-y" }}
-      />
-
-      {/* UI Overlay Layer */}
-      <div
-        className="absolute inset-0 flex flex-col justify-end pointer-events-none z-20 ui-overlay"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        ref={containerRef}
+        tabIndex={-1}
+        className="relative w-full h-screen snap-start pointer-events-auto bg-black select-none overflow-hidden"
       >
-        <div className="w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-24 pb-4 px-4">
-          <div className="flex items-end gap-4">
-            <VideoInfoOverlay
-              authorName={video.author.name}
-              title={video.title}
-              description={video.description}
-              progress={progress}
-              progressRef={progressRef}
-              onProgressInteract={progressHandlers}
-            />
+        <div className="flex items-center justify-center h-full bg-black">
+          <video
+            ref={videoRef}
+            src={videoSrc}
+            loop
+            playsInline
+            muted={isMuted}
+            preload="metadata"
+            className="w-full h-auto max-h-full object-contain pointer-events-none"
+          />
+        </div>
 
-            <VideoActionButtons
-              isLiked={isLiked}
-              likeCount={likeCount}
-              onLike={handleLike}
-              originalUrl={video.originalUrl}
-              onShare={handleShare}
-              isMuted={isMuted}
-              onToggleMute={handleToggleMute}
-              onUploadRequest={onUploadRequest}
-            />
+        {/* Gesture Layer */}
+        <div
+          className="absolute inset-0 z-10 ui-gesture"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={() => {
+            clearLongPress();
+            setLongPressActive(false);
+            setFfDirection(null);
+            stopRewind();
+            startRef.current = null;
+          }}
+          onContextMenu={(e) => e.preventDefault()}
+          style={{ touchAction: "pan-y" }}
+        />
+
+        {/* UI Overlay Layer */}
+        <div
+          className="absolute inset-0 flex flex-col justify-end pointer-events-none z-20 ui-overlay"
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        >
+          <div className="w-full bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-24 pb-4 px-4">
+            <div className="flex items-end gap-4">
+              <VideoInfoOverlay
+                authorName={video.author.name}
+                title={video.title}
+                description={video.description}
+                progress={progress}
+                progressRef={progressRef}
+                onProgressInteract={progressHandlers}
+              />
+
+              <VideoActionButtons
+                isLiked={isLiked}
+                likeCount={likeCount}
+                onLike={handleLike}
+                onOpenAddToList={handleOpenAddToList}
+                originalUrl={video.originalUrl}
+                onShare={handleShare}
+                isMuted={isMuted}
+                onToggleMute={handleToggleMute}
+                onUploadRequest={onUploadRequest}
+              />
+            </div>
           </div>
         </div>
+
+        {/* Play/Speed/Rewind Indicators */}
+        {(longPressActive || ffDirection) && (
+          <div className="absolute top-24 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center">
+            <div className="bg-black/60 backdrop-blur-md text-white px-4 py-2 rounded-full text-sm font-bold shadow-xl flex items-center gap-2">
+              {ffDirection === "rewind" ? (
+                <>
+                  <RewindIcon />
+                  <span>Rewind</span>
+                </>
+              ) : (
+                <>
+                  <span>{FAST_FORWARD_RATE}x Speed</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Play/Speed/Rewind Indicators */}
-      {(longPressActive || ffDirection) && (
-        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center">
-          <div className="bg-black/60 backdrop-blur-md text-white px-4 py-2 rounded-full text-sm font-bold shadow-xl flex items-center gap-2">
-            {ffDirection === "rewind" ? (
-              <>
-                <RewindIcon />
-                <span>Rewind</span>
-              </>
-            ) : (
-              <>
-                <span>{FAST_FORWARD_RATE}x Speed</span>
-              </>
-            )}
-          </div>
-        </div>
+      {/* モーダルをここにレンダリング */}
+      {isAddToListModalOpen && (
+        <AddToListModal
+          videoId={video.id}
+          onClose={() => setAddToListModalOpen(false)}
+        />
       )}
-    </div>
+    </>
   );
 }
+
