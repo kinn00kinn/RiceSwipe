@@ -3,6 +3,7 @@
 import { useState, useCallback, ChangeEvent } from "react";
 import { Button } from "./ui/Button";
 import { z } from "zod";
+import { Turnstile } from "@marsidev/react-turnstile";
 
 // Define Zod schema for the sign API response
 const SignApiResponseSchema = z.object({
@@ -26,12 +27,14 @@ export default function UploadModal({ onClose }: UploadModalProps) {
     "idle" | "uploading" | "success" | "error"
   >("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  // 他の useState の並びに追加してください
+  const [turnstileToken, setTurnstileToken] = useState("");
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
       setFile(selectedFile);
-      
+
       // UX向上: タイトル自動入力
       if (!title) {
         const nameWithoutExt = selectedFile.name.replace(/\.[^/.]+$/, "");
@@ -40,21 +43,25 @@ export default function UploadModal({ onClose }: UploadModalProps) {
     }
   };
 
-  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const selectedFile = e.dataTransfer.files[0];
-      setFile(selectedFile);
-      
-      // UX向上: タイトル自動入力 (ドラッグ＆ドロップ時も)
-      if (!title) { // title stateにアクセスできないため、set関数内でチェック等はできないが、ここは簡易的に実施
-         const nameWithoutExt = selectedFile.name.replace(/\.[^/.]+$/, "");
-         setTitle(prev => prev || nameWithoutExt);
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        const selectedFile = e.dataTransfer.files[0];
+        setFile(selectedFile);
+
+        // UX向上: タイトル自動入力 (ドラッグ＆ドロップ時も)
+        if (!title) {
+          // title stateにアクセスできないため、set関数内でチェック等はできないが、ここは簡易的に実施
+          const nameWithoutExt = selectedFile.name.replace(/\.[^/.]+$/, "");
+          setTitle((prev) => prev || nameWithoutExt);
+        }
       }
-    }
-  }, [title]); // titleを依存配列に入れる
+    },
+    [title]
+  ); // titleを依存配列に入れる
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -79,6 +86,10 @@ export default function UploadModal({ onClose }: UploadModalProps) {
       setErrorMessage("Video file and title are required.");
       return;
     }
+    if (!turnstileToken) {
+      setErrorMessage("Please complete the security check.");
+      return;
+    }
     setStatus("uploading");
     setErrorMessage("");
 
@@ -90,6 +101,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
         body: JSON.stringify({
           filename: file.name,
           contentType: file.type,
+          turnstileToken,
         }),
       });
 
@@ -176,7 +188,6 @@ export default function UploadModal({ onClose }: UploadModalProps) {
         <div className="w-full flex justify-center pt-3 pb-1 sm:hidden pointer-events-none">
           <div className="w-12 h-1.5 bg-gray-700 rounded-full" />
         </div>
-
         <div className="p-6 overflow-y-auto">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-bold text-white">Upload Video</h2>
@@ -187,7 +198,12 @@ export default function UploadModal({ onClose }: UploadModalProps) {
               ✕
             </button>
           </div>
-
+          <div className="my-4 flex justify-center">
+            <Turnstile
+              siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
+              onSuccess={(token) => setTurnstileToken(token)}
+            />
+          </div>
           {status === "uploading" ? (
             <div className="py-10 text-center space-y-4">
               <div className="w-16 h-16 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto" />
@@ -229,8 +245,18 @@ export default function UploadModal({ onClose }: UploadModalProps) {
             <form onSubmit={handleSubmit} className="space-y-5">
               {status === "error" && (
                 <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm flex items-start gap-3">
-                   <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <svg
+                    className="w-5 h-5 flex-shrink-0 mt-0.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
                   </svg>
                   <span>{errorMessage}</span>
                 </div>
@@ -281,8 +307,12 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                     </div>
                   ) : (
                     <div className="text-gray-400 group">
-                      <p className="text-3xl mb-3 group-hover:scale-110 transition-transform duration-200">☁️</p>
-                      <p className="font-medium text-gray-300">Tap to select video</p>
+                      <p className="text-3xl mb-3 group-hover:scale-110 transition-transform duration-200">
+                        ☁️
+                      </p>
+                      <p className="font-medium text-gray-300">
+                        Tap to select video
+                      </p>
                       <p className="text-sm text-gray-500 mt-1">
                         or drag and drop
                       </p>
@@ -335,7 +365,10 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                     htmlFor="originalUrl"
                     className="block text-sm font-medium text-gray-300 mb-1.5"
                   >
-                    Original URL <span className="text-gray-500 text-xs ml-1">(Optional)</span>
+                    Original URL{" "}
+                    <span className="text-gray-500 text-xs ml-1">
+                      (Optional)
+                    </span>
                   </label>
                   <input
                     id="originalUrl"

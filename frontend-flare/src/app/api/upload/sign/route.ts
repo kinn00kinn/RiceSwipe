@@ -3,14 +3,11 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { z } from "zod";
 
-// ランタイム指定は標準のままでOK（NodeでもEdgeでも動く）ですが、
-// 余計なトラブルを避けるなら edge 指定しておくと良いです。
-// export const runtime = "edge";
+// export const runtime = "edge"; // 推奨
 
 export async function POST(request: NextRequest) {
   // 1. ユーザー認証
   const cookieStore = await cookies();
-  // 環境変数の読み込み (process.env または getCloudflareContext どちらでも動くように)
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -36,21 +33,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
+  // ★修正ポイント1: スキーマに turnstileToken を追加
   const schema = z.object({
     filename: z.string().min(1),
     contentType: z.string().min(1),
+    turnstileToken: z.string().min(1), // これがないと検証ではじかれるか、無視されます
   });
+
   const validation = schema.safeParse(body);
   if (!validation.success)
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
 
-  // 3. ID生成
-  const { filename, contentType } = validation.data;
+  // ★修正ポイント2: 変数を取り出す
+  const { filename, contentType, turnstileToken } = validation.data;
+
   const videoId = crypto.randomUUID();
   const objectKey = `${user.id}/${videoId}/${filename}`;
 
-  // 4. 【ここが重要】別で作った backend-signer に署名を依頼する
-  // 環境変数からURLとキーを取得（設定されていない場合のハードコードは開発用）
+  // 3. バックエンド署名サービスへリクエスト
   const signerUrl = process.env.SIGNER_WORKER_URL;
   const internalKey = process.env.INTERNAL_API_KEY;
 
@@ -64,18 +64,23 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Internal-Key": internalKey, // 合言葉をセット
+        "X-Internal-Key": internalKey,
       },
-      body: JSON.stringify({ objectKey, contentType }),
+      // ★修正ポイント3: body に turnstileToken を含めて転送する
+      body: JSON.stringify({
+        objectKey,
+        contentType,
+        turnstileToken,
+      }),
     });
 
     if (!signerRes.ok) {
+      // ここで "Turnstile token is missing" というエラーをキャッチしていました
       throw new Error(await signerRes.text());
     }
 
     const { uploadUrl } = (await signerRes.json()) as { uploadUrl: string };
 
-    // 成功！フロントエンドにURLを返す
     return NextResponse.json({
       uploadUrl,
       videoId,
