@@ -4,13 +4,24 @@ import { createServerClient } from "@supabase/ssr";
 
 async function getSupabaseAndUser() {
   const cookieStore = await cookies();
-  const supabase = await createServerClient(
+  const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {
+            // The `setAll` method was called from a Server Component.
+            // This can be ignored if you have middleware refreshing
+            // user sessions.
+          }
         },
       },
     }
@@ -24,10 +35,10 @@ async function getSupabaseAndUser() {
 // GET: Get list details and included videos
 export async function GET(
   request: NextRequest,
-  { params }: { params: { listId: string } }
+  { params }: { params: Promise<{ listId: string }> } // 1. Type as Promise
 ) {
   const { supabase, user } = await getSupabaseAndUser();
-  const { listId } = params;
+  const { listId } = await params; // 2. Await params
 
   // Get list info
   const { data: list, error: listError } = await supabase
@@ -72,13 +83,13 @@ export async function GET(
 // PATCH: Update list info
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { listId: string } }
+  { params }: { params: Promise<{ listId: string }> } // 1. Type as Promise
 ) {
   const { supabase, user } = await getSupabaseAndUser();
   if (!user)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { listId } = params;
+  const { listId } = await params; // 2. Await params
 
   // Fix: Explicitly type the result of request.json()
   const body = (await request.json()) as { name?: string; isPublic?: boolean };
@@ -101,13 +112,13 @@ export async function PATCH(
 // DELETE: Delete list
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { listId: string } }
+  { params }: { params: Promise<{ listId: string }> } // 1. Type as Promise
 ) {
   const { supabase, user } = await getSupabaseAndUser();
   if (!user)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { listId } = params;
+  const { listId } = await params; // 2. Await params
 
   const { error } = await supabase
     .from("lists")

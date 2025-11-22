@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, use } from "react"; // 1. Import 'use'
 import Link from "next/link";
 
 interface VideoSummary {
@@ -44,9 +44,9 @@ const HeartIcon = () => (
 export default function UserProfilePage({
   params,
 }: {
-  params: { userId: string };
+  params: Promise<{ userId: string }>; // 2. Type params as Promise
 }) {
-  const { userId } = params;
+  const { userId } = use(params); // 3. Unwrap params with use()
   const [user, setUser] = useState<UserProfile | null>(null);
   const [activeTab, setActiveTab] = useState<"videos" | "likes">("videos");
   const [loading, setLoading] = useState(true);

@@ -5,22 +5,33 @@ import { createServerClient } from "@supabase/ssr";
 // GET: ユーザープロフィール取得
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> } // 1. Type as Promise
 ) {
   const cookieStore = await cookies();
-  const supabase = await createServerClient(
+  const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name) {
-          return cookieStore.get(name)?.value;
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {
+            // The `setAll` method was called from a Server Component.
+            // This can be ignored if you have middleware refreshing
+            // user sessions.
+          }
         },
       },
     }
   );
 
-  const { userId } = params;
+  const { userId } = await params; // 2. Await params
 
   // 1. ユーザー基本情報
   const { data: user, error } = await supabase
