@@ -8,10 +8,12 @@ import React, {
   useCallback,
 } from "react";
 import type { Video as VideoType } from "@prisma/client";
-import { VideoInfoOverlay } from "./player/VideoInfoOverlay";
-import { VideoActionButtons } from "./player/VideoActionButtons";
-import { AddToListModal } from "./lists/AddToListModal";
+// 修正: ファイルの実態に合わせてデフォルトインポートに戻します
+import VideoInfoOverlay from "./player/VideoInfoOverlay";
+import VideoActionButtons from "./player/VideoActionButtons";
+import AddToListModal from "./lists/AddToListModal";
 
+// APIから取得する動画データの型定義
 type VideoFromApi = VideoType & {
   author: { id: string; name: string | null };
   likeCount: number;
@@ -80,16 +82,18 @@ export default function VideoPlayer({
   } | null>(null);
 
   const videoSrc = useMemo(() => {
-    if (!R2_PUBLIC_DOMAIN) return "";
+    if (!R2_PUBLIC_DOMAIN) return video.originalUrl || "";
     const paths = video.compressedPaths as Record<string, string> | null;
+    // 修正: Prismaの型定義に合わせて r2ObjectKey (camelCase) を使用
+    // エラーログの r2_object_key は誤りです
     let key = video.r2ObjectKey;
     if (paths) {
       if (paths["720p"]) key = paths["720p"];
       else if (paths["480p"]) key = paths["480p"];
       else if (paths["360p"]) key = paths["360p"];
     }
-    return `${R2_PUBLIC_DOMAIN}/${key}`;
-  }, [video.r2ObjectKey, video.compressedPaths]);
+    return key ? `${R2_PUBLIC_DOMAIN}/${key}` : video.originalUrl || "";
+  }, [video.r2ObjectKey, video.compressedPaths, video.originalUrl]);
 
   // ★ UIを表示し、3秒後に非表示にする関数
   const showUiAndResetTimer = useCallback(() => {
@@ -402,26 +406,30 @@ export default function VideoPlayer({
   };
 
   const progressHandlers = {
-    down: (e: React.PointerEvent) => {
+    onPointerDown: (e: React.PointerEvent) => {
       e.stopPropagation();
       e.preventDefault();
       handleUserInteraction();
       seekingRef.current = true;
-      (e.target as Element).setPointerCapture?.(e.pointerId);
+      try {
+        (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+      } catch {}
       updateProgressFromEvent(e);
     },
-    move: (e: React.PointerEvent) => {
+    onPointerMove: (e: React.PointerEvent) => {
       if (!seekingRef.current) return;
       e.preventDefault();
       handleUserInteraction();
       updateProgressFromEvent(e);
     },
-    up: (e: React.PointerEvent) => {
+    onPointerUp: (e: React.PointerEvent) => {
       e.stopPropagation();
       e.preventDefault();
       handleUserInteraction();
       seekingRef.current = false;
-      (e.target as Element).releasePointerCapture?.(e.pointerId);
+      try {
+        (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
+      } catch {}
     },
   };
 
@@ -433,6 +441,15 @@ export default function VideoPlayer({
       videoRef.current.currentTime = (videoRef.current.duration || 0) * ratio;
       setProgress(ratio * 100);
     }
+  };
+
+  // 型互換のためのアダプタ: nullを含むnameを"Unknown"に変換
+  const safeVideo = {
+    ...video,
+    author: {
+      ...video.author,
+      name: video.author.name || "Unknown",
+    },
   };
 
   return (
@@ -482,21 +499,34 @@ export default function VideoPlayer({
         >
           <div className="w-full bg-gradient-to-t from-black/90 via-black/40 to-transparent pt-32 pb-4 px-4">
             <div className="flex items-end gap-4">
-              <VideoInfoOverlay
-                authorName={video.author.name}
-                title={video.title}
-                description={video.description}
-                progress={progress}
-                progressRef={progressRef}
-                onProgressInteract={progressHandlers}
-              />
+              {/* Info Overlay + Progress Bar (手動統合) */}
+              <div className="flex-1 flex flex-col gap-2 pointer-events-auto">
+                {/* safeVideo を渡して型エラーを解消 */}
+                <VideoInfoOverlay video={safeVideo} />
+
+                {/* Progress Bar: VideoInfoOverlayから外れたためここで描画 */}
+                <div
+                  ref={progressRef}
+                  className="w-full h-4 flex items-center cursor-pointer touch-none"
+                  {...progressHandlers}
+                >
+                  <div className="relative w-full h-1 bg-white/30 rounded-full overflow-hidden">
+                    <div
+                      className="absolute top-0 left-0 h-full bg-white"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
 
               <div
                 className={`transition-opacity duration-300 ${
                   isUiVisible ? "pointer-events-auto" : "pointer-events-none"
                 }`}
               >
+                {/* safeVideo を渡して型エラーを解消 */}
                 <VideoActionButtons
+                  video={safeVideo}
                   isLiked={isLiked}
                   likeCount={likeCount}
                   onLike={handleLike}
