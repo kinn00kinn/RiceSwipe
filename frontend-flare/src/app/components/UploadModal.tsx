@@ -29,6 +29,8 @@ export default function UploadModal({ onClose }: UploadModalProps) {
   const [errorMessage, setErrorMessage] = useState("");
   // 他の useState の並びに追加してください
   const [turnstileToken, setTurnstileToken] = useState("");
+  const [hashtags, setHashtags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -79,6 +81,20 @@ export default function UploadModal({ onClose }: UploadModalProps) {
     e.stopPropagation();
     setIsDragging(false);
   }, []);
+
+  const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      const val = tagInput.trim().replace(/^#/, ""); // #を除去
+      if (val && !hashtags.includes(val)) {
+        setHashtags([...hashtags, val]);
+      }
+      setTagInput("");
+    }
+  };
+  const removeTag = (tag: string) => {
+    setHashtags(hashtags.filter((t) => t !== tag));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -359,6 +375,36 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1.5">
+                    Hashtags
+                  </label>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {hashtags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="bg-blue-600/20 text-blue-400 px-2 py-1 rounded text-sm flex items-center gap-1"
+                      >
+                        #{tag}
+                        <button
+                          type="button"
+                          onClick={() => removeTag(tag)}
+                          className="hover:text-white"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={handleTagKeyDown}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                    placeholder="Add tags (Space or Enter)"
+                  />
+                </div>
                 {/* ★追加: Original URL */}
                 <div>
                   <label

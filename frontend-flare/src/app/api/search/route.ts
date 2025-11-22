@@ -23,32 +23,96 @@ export async function GET(request: NextRequest) {
     }
   );
 
-  // PostgREST syntax for ILIKE (case-insensitive search) on title or description
-  // or logic: title.ilike.%query%,description.ilike.%query%
-  const { data: videos, error } = await supabase
-    .from("videos")
-    .select(
+  let data: any[] = [];
+  let error = null;
+
+  // ハッシュタグ検索かどうかの判定 (#で始まる場合)
+  const isHashtagSearch = query.startsWith("#");
+  const cleanQuery = query.replace("#", "");
+
+  if (isHashtagSearch) {
+    // --- ハッシュタグ検索 ---
+    // 1. まずハッシュタグIDを取得
+    const { data: hashtagData } = await supabase
+      .from("hashtags")
+      .select("id")
+      .ilike("name", cleanQuery) // 大文字小文字を区別せず検索
+      .single();
+
+    if (hashtagData) {
+      // 2. そのハッシュタグに関連する動画を取得
+      // video_hashtags テーブルを検索し、紐づく videos を取得する
+      const result = await supabase
+        .from("video_hashtags")
+        .select(
+          `
+          video:videos!inner (
+            *,
+            author:users!videos_author_id_fkey ( id, name ),
+            video_hashtags (
+              hashtag:hashtags ( id, name )
+            )
+          )
+        `
+        )
+        .eq("hashtag_id", hashtagData.id)
+        // 関連テーブル (videos) の created_at でソートする正しい構文
+        .order("created_at", { foreignTable: "video", ascending: false })
+        .limit(20);
+
+      error = result.error;
+
+      // 構造をフラットにする (video_hashtags配列 -> video配列)
+      if (result.data) {
+        data = result.data.map((item: any) => {
+          const v = item.video;
+          // ネストしたハッシュタグ情報を整形: video_hashtags配列 -> hashtags配列
+          const tags = v.video_hashtags?.map((vh: any) => vh.hashtag) || [];
+          // 不要なプロパティを除去して再構築
+          const { video_hashtags, ...videoProps } = v;
+          return { ...videoProps, hashtags: tags };
+        });
+      }
+    } else {
+      // 該当するハッシュタグが存在しない場合
+      data = [];
+    }
+  } else {
+    // --- 通常のキーワード検索 ---
+    const result = await supabase
+      .from("videos")
+      .select(
+        `
+        *,
+        author:users!videos_author_id_fkey ( id, name ),
+        video_hashtags (
+           hashtag:hashtags ( id, name )
+        )
       `
-      *,
-      author:users!videos_author_id_fkey ( id, name )
-    `
-    )
-    .or(`title.ilike.%${query}%,description.ilike.%${query}%`)
-    .order("created_at", { ascending: false })
-    .limit(20);
+      )
+      .or(`title.ilike.%${query}%,description.ilike.%${query}%`)
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    error = result.error;
+
+    if (result.data) {
+      // ネストしたハッシュタグ情報を整形
+      data = result.data.map((v: any) => {
+        // video_hashtags配列 -> hashtags配列
+        const tags = v.video_hashtags?.map((vh: any) => vh.hashtag) || [];
+        // 不要なプロパティを除去して再構築
+        const { video_hashtags, ...videoProps } = v;
+        return { ...videoProps, hashtags: tags };
+      });
+    }
+  }
 
   if (error) {
     console.error("Search error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Note: In a real production app, you would also fetch like counts and isLiked status here,
-  // similar to the feed API. For simplicity in search results, we return basic video data.
-  const videosWithMeta = videos.map((v) => ({
-    ...v,
-    likeCount: 0, // Search results simplify this for now
-    isLiked: false,
-  }));
-
-  return NextResponse.json(videosWithMeta);
+  // フロントエンド側で扱いやすい形式で返す
+  return NextResponse.json({ videos: data || [] });
 }
